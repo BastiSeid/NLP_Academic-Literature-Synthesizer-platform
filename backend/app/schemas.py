@@ -1,0 +1,98 @@
+"""Pydantic schemas — the contract every subagent output is validated against
+before the next stage consumes it (output-shape validation invariant)."""
+from __future__ import annotations
+
+from typing import List, Optional, Literal
+from pydantic import BaseModel, Field
+
+
+# ── Run params (from the UI New Run screen) ──────────────────────────────────
+class RunParams(BaseModel):
+    date_range: Optional[str] = None            # e.g. "2018-2026" or null
+    max_candidates: int = 80
+    max_kept: int = 25
+    source_set: List[str] = Field(
+        default_factory=lambda: ["arxiv", "semantic_scholar", "openalex", "web"]
+    )
+    export_dir: Optional[str] = None
+    cost_cap_usd: Optional[float] = None        # overrides global default if set
+
+
+class NewRunRequest(BaseModel):
+    query: str
+    params: RunParams = Field(default_factory=RunParams)
+
+
+# ── Stage 1: Scout scope plan ────────────────────────────────────────────────
+class ScopePlan(BaseModel):
+    sub_questions: List[str]
+    search_terms: List[str]
+    rationale: str = ""
+
+
+# ── Stage 2: Scout candidates ────────────────────────────────────────────────
+class Candidate(BaseModel):
+    source_id: str                              # stable internal id
+    title: str
+    authors: List[str] = Field(default_factory=list)
+    year: Optional[int] = None
+    venue: Optional[str] = None
+    abstract: str = ""
+    identifier: str = ""                         # DOI / arXiv id / URL
+    url: str = ""
+    source: str = ""                             # arxiv | semantic_scholar | openalex | web
+    score: Optional[float] = None
+
+
+# ── Stage 3: Gatekeeper output ───────────────────────────────────────────────
+class RejectionEntry(BaseModel):
+    source_id: str
+    title: str
+    reason_code: str                            # e.g. OFF_TOPIC, LOW_QUALITY, DUPLICATE, OUTDATED
+    justification: str
+
+
+class ScreenResult(BaseModel):
+    kept_ids: List[str]
+    rejections: List[RejectionEntry]
+
+
+# ── Stage 4: Reader notes ────────────────────────────────────────────────────
+class ReaderNote(BaseModel):
+    source_id: str
+    claim: str
+    evidence: str
+    location: str                               # section / page / "abstract"
+    note_type: Literal["claim", "method", "finding"] = "finding"
+
+
+class ReaderOutput(BaseModel):
+    source_id: str
+    notes: List[ReaderNote]
+
+
+# ── Stage 5: Synthesizer output ──────────────────────────────────────────────
+class CitationRef(BaseModel):
+    marker: str                                 # inline marker, e.g. "S3"
+    source_id: str
+    claim: str                                  # the claim this citation backs
+
+
+class SynthOutput(BaseModel):
+    review_markdown: str
+    mermaid: str
+    citations: List[CitationRef]
+    themes: List[str] = Field(default_factory=list)
+
+
+# ── Stage 6: Verifier output ─────────────────────────────────────────────────
+class CitationVerdict(BaseModel):
+    marker: str
+    source_id: str
+    claim: str
+    supported: bool
+    reason: str = ""
+
+
+class VerifyOutput(BaseModel):
+    verdicts: List[CitationVerdict]

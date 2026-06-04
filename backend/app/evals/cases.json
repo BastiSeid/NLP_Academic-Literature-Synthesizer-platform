@@ -1,0 +1,103 @@
+{
+  "description": "Eval set for the Academic Literature Synthesizer. Includes normal broad queries and deliberate failure cases (sparse literature, overstating-abstract traps, ambiguous scope). Citation verification gates EVERY run inline — there is no separate verification toggle.",
+  "cases": [
+    {
+      "id": "llm-agents-survey",
+      "category": "normal",
+      "query": "What are the latest advancements in multi-agent LLM systems and orchestration?",
+      "params": {"max_candidates": 40, "max_kept": 12, "source_set": ["arxiv", "semantic_scholar", "openalex"]},
+      "expect": "Rich literature; high kept count; most citations verifiable."
+    },
+    {
+      "id": "rag-retrieval",
+      "category": "normal",
+      "query": "Retrieval-augmented generation: methods, benchmarks, and open problems",
+      "params": {"max_candidates": 40, "max_kept": 12},
+      "expect": "Dense field; clear themes and disputes."
+    },
+    {
+      "id": "diffusion-video",
+      "category": "normal",
+      "query": "Diffusion models for video generation since 2023",
+      "params": {"date_range": "2023-2026", "max_candidates": 35, "max_kept": 10},
+      "expect": "Date filter exercised; recent-only candidates."
+    },
+    {
+      "id": "mech-interp",
+      "category": "normal",
+      "query": "Mechanistic interpretability of transformer language models",
+      "params": {"max_candidates": 35, "max_kept": 10},
+      "expect": "Mix of seminal and new work via citation graph."
+    },
+    {
+      "id": "constitutional-ai",
+      "category": "normal",
+      "query": "Reinforcement learning from human and AI feedback for alignment",
+      "params": {"max_candidates": 35, "max_kept": 10},
+      "expect": "Consensus vs dispute should surface (RLHF vs RLAIF)."
+    },
+    {
+      "id": "sparse-niche",
+      "category": "failure-sparse",
+      "query": "Topological quantum error correction in left-handed metamaterial qubits at room temperature",
+      "params": {"max_candidates": 30, "max_kept": 8},
+      "expect": "FAILURE CASE: sparse/near-empty literature. Pipeline must degrade gracefully, keep few or zero, and NOT fabricate citations."
+    },
+    {
+      "id": "overstated-abstract",
+      "category": "failure-overstate",
+      "query": "Do large language models truly reason, or pattern-match? Evidence for and against",
+      "params": {"max_candidates": 40, "max_kept": 12},
+      "expect": "FAILURE TRAP: many abstracts overstate ('LLMs reason like humans'). Gatekeeper should flag OVERSTATED; Verifier must reject claims the notes don't support."
+    },
+    {
+      "id": "ambiguous-scope",
+      "category": "failure-ambiguous",
+      "query": "transformers",
+      "params": {"max_candidates": 40, "max_kept": 12},
+      "expect": "AMBIGUOUS: ML transformers vs electrical transformers. Scout scoping + the approval gate exist exactly for this — user revises at the gate."
+    },
+    {
+      "id": "web-grey-lit",
+      "category": "normal",
+      "query": "Production best practices for serving large language models at low latency",
+      "params": {"max_candidates": 30, "max_kept": 10, "source_set": ["arxiv", "openalex", "web"]},
+      "expect": "Grey literature via web source; mixed source provenance."
+    },
+    {
+      "id": "interdisciplinary",
+      "category": "normal",
+      "query": "Applications of graph neural networks in computational drug discovery",
+      "params": {"max_candidates": 40, "max_kept": 12, "source_set": ["openalex", "semantic_scholar", "arxiv"]},
+      "expect": "OpenAlex breadth across CS + bio venues."
+    },
+    {
+      "id": "tiny-budget",
+      "category": "failure-budget",
+      "query": "Scaling laws for neural language models",
+      "params": {"max_candidates": 20, "max_kept": 5, "cost_cap_usd": 3.0},
+      "expect": "FAILURE CASE: very low cost cap. Run should hit the cost cap and HALT cleanly (status failed, no cap breach), proving the hard stop."
+    },
+    {
+      "id": "recent-only-empty",
+      "category": "failure-sparse",
+      "query": "Neural architecture search advances",
+      "params": {"date_range": "2030-2031", "max_candidates": 30, "max_kept": 8},
+      "expect": "FAILURE CASE: impossible future date range → near-zero candidates after filter; must not fabricate."
+    },
+    {
+      "id": "high-dispute",
+      "category": "normal",
+      "query": "Is scale all you need? Emergent abilities of large language models, claims and critiques",
+      "params": {"max_candidates": 40, "max_kept": 12},
+      "expect": "Strong consensus-vs-dispute section expected (emergence is contested)."
+    },
+    {
+      "id": "robotics-foundation",
+      "category": "normal",
+      "query": "Foundation models for robotics and embodied agents",
+      "params": {"max_candidates": 35, "max_kept": 10},
+      "expect": "Cross-source coverage; recent + seminal mix."
+    }
+  ]
+}

@@ -1,0 +1,28 @@
+# ─── Secrets — never commit real env files (any depth). Keep .env.example. ───
+.env
+.env.*
+*.env
+!.env.example
+!**/.env.example
+
+# ─── Python ───
+backend/.venv/
+.venv/
+__pycache__/
+*.pyc
+
+# ─── Local datastore & generated outputs (may contain query data / PII paths) ─
+backend/litsynth.db
+*.db
+backend/exports/
+exports/
+
+# ─── Frontend ───
+frontend/node_modules/
+node_modules/
+frontend/dist/
+dist/
+*.tsbuildinfo
+
+# ─── OS ───
+.DS_Store
