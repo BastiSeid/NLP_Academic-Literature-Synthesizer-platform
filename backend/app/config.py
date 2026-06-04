@@ -18,6 +18,15 @@ def _abspath(p: str) -> str:
 class Config:
     # Agent runtime
     MODEL: str = os.getenv("LITSYNTH_MODEL", "claude-opus-4-8")
+    # Models offered in the per-run picker (env-overridable, comma-separated).
+    AVAILABLE_MODELS: list[str] = [
+        m.strip()
+        for m in os.getenv(
+            "LITSYNTH_AVAILABLE_MODELS",
+            "claude-opus-4-8,claude-sonnet-4-6,claude-haiku-4-5-20251001",
+        ).split(",")
+        if m.strip()
+    ]
     CLAUDE_BIN: str = os.getenv("LITSYNTH_CLAUDE_BIN", "claude")
     AGENT_TIMEOUT: int = int(os.getenv("LITSYNTH_AGENT_TIMEOUT", "300"))
     ANTHROPIC_API_KEY: str = os.getenv("ANTHROPIC_API_KEY", "").strip()

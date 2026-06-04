@@ -16,13 +16,16 @@ and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2
 
 ## [Unreleased]
 
-_Nothing yet — add changes here as we debug and enhance the platform._
-
 ### Added
+- **Per-run model selector** — the New Run screen now offers a model dropdown
+  (Opus 4.8 / Sonnet 4.6 / Haiku 4.5; blank = server default). Options are served by the
+  backend (`LITSYNTH_AVAILABLE_MODELS`, exposed via `/health`) and the choice is threaded
+  through every agent call for that run.
+- **Pipeline progress bar** — the run view shows a determinate stage-progress bar with a
+  percentage and current-stage caption, alongside the existing live counts.
+
 ### Changed
-### Fixed
-### Removed
-### Security
+- **Run view shows the full research question** instead of truncating it to 70 characters.
 
 ---
 
