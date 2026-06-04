@@ -12,12 +12,28 @@ const STAGE_LABELS: Record<string, string> = {
 export default function Progress({ run, onCancel }: { run: RunState; onCancel: () => void }) {
   const active = ACTIVE_STATUSES.has(run.status);
   const c = run.counts;
+  const total = run.stages.length || 6;
+  const doneCount = run.stages.filter((s) => s.status === "done").length;
+  const running = run.stages.find((s) => s.status === "running");
+  const pct = run.status === "done"
+    ? 100
+    : Math.round(((doneCount + (running ? 0.5 : 0)) / total) * 100);
+  const activeLabel = running
+    ? (STAGE_LABELS[running.name] || running.name)
+    : run.status.replace("_", " ");
   return (
     <div className="card">
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <h2 style={{ margin: 0 }}>Pipeline · <span className="muted">{run.query.slice(0, 70)}</span></h2>
+        <h2 style={{ margin: 0 }}>Pipeline</h2>
         <span className={"badge " + run.status}>{run.status.replace("_", " ")}</span>
       </div>
+      <p className="runquery">{run.query}</p>
+
+      <div className="progressbar" role="progressbar"
+        aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100}>
+        <div className={"fill" + (active ? " active" : "")} style={{ width: pct + "%" }} />
+      </div>
+      <div className="progresscap muted">{pct}% · {activeLabel}</div>
 
       <div className="metrics">
         <div className="metric"><div className="v">{c.candidates}</div><div className="l">candidates</div></div>

@@ -67,6 +67,12 @@ details summary { cursor: pointer; color: var(--accent); margin-bottom: 12px; }
 .metric { background: var(--panel-2); border: 1px solid var(--border); border-radius: 10px; padding: 10px 14px; min-width: 90px; }
 .metric .v { font-size: 20px; font-weight: 700; }
 .metric .l { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .04em; }
+.runquery { margin: 6px 0 14px; font-size: 15px; line-height: 1.5; white-space: pre-wrap; word-break: break-word; }
+.progressbar { height: 8px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 999px; overflow: hidden; }
+.progressbar .fill { height: 100%; width: 0; background: var(--accent); border-radius: 999px; transition: width .4s ease; }
+.progressbar .fill.active { background: linear-gradient(90deg, var(--accent), #9ec5ff); animation: barpulse 1.4s ease-in-out infinite; }
+.progresscap { font-size: 12px; margin: 6px 0 2px; text-transform: capitalize; }
+@keyframes barpulse { 0%,100% { opacity: 1; } 50% { opacity: .7; } }
 
 /* tabs */
 .tabs { display: flex; gap: 6px; border-bottom: 1px solid var(--border); margin-bottom: 16px; flex-wrap: wrap; }

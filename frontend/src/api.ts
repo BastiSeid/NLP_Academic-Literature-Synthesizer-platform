@@ -7,7 +7,9 @@ export interface RunParams {
   source_set: string[];
   export_dir?: string | null;
   cost_cap_usd?: number | null;
+  model?: string | null;
 }
+export interface Health { ok: boolean; model: string; models: string[]; cost_cap_usd: number; }
 
 export interface Stage { name: string; status: string; detail: string; }
 export interface Counts {
@@ -54,7 +56,7 @@ async function j<T>(r: Response): Promise<T> {
 }
 
 export const api = {
-  health: () => fetch("/health").then(j<any>),
+  health: () => fetch("/health").then(j<Health>),
   createRun: (query: string, params: RunParams) =>
     fetch("/api/runs", {
       method: "POST", headers: { "Content-Type": "application/json" },

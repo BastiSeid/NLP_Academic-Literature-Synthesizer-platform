@@ -27,7 +27,12 @@ def _startup() -> None:
 
 @app.get("/health")
 def health():
-    return {"ok": True, "model": config.MODEL, "cost_cap_usd": config.COST_CAP_USD}
+    return {
+        "ok": True,
+        "model": config.MODEL,
+        "models": config.AVAILABLE_MODELS,
+        "cost_cap_usd": config.COST_CAP_USD,
+    }
 
 
 @app.post("/api/runs")

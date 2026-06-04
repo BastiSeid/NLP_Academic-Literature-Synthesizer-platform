@@ -26,9 +26,14 @@ _SOURCE_FUNCS = {
 
 
 def _charged_structured(ctx, system, user, schema):
-    """Run an agent with schema validation, charging each attempt to the cap."""
+    """Run an agent with schema validation, charging each attempt to the cap.
+    Uses the run's per-run model override when set, else the server default."""
     ctx.check()
-    return run_structured(system, user, schema, cost_sink=ctx.charge)
+    return run_structured(
+        system, user, schema,
+        model=ctx.state.params.model or None,
+        cost_sink=ctx.charge,
+    )
 
 
 # ── Stage 1 — Scope & expand (Scout) ─────────────────────────────────────────

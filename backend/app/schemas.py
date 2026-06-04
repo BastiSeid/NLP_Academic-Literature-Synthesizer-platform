@@ -16,6 +16,7 @@ class RunParams(BaseModel):
     )
     export_dir: Optional[str] = None
     cost_cap_usd: Optional[float] = None        # overrides global default if set
+    model: Optional[str] = None                 # per-run model override; None → server default
 
 
 class NewRunRequest(BaseModel):
