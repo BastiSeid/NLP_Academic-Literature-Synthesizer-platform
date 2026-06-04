@@ -73,6 +73,8 @@ export const api = {
     }).then(j<RunState>),
   cancel: (id: string) =>
     fetch(`/api/runs/${id}/cancel`, { method: "POST" }).then(j<any>),
+  resume: (id: string) =>
+    fetch(`/api/runs/${id}/resume`, { method: "POST" }).then(j<RunState>),
 };
 
 export const ACTIVE_STATUSES = new Set([

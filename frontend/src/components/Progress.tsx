@@ -9,7 +9,7 @@ const STAGE_LABELS: Record<string, string> = {
   verify: "6 · Verify citations",
 };
 
-export default function Progress({ run, onCancel }: { run: RunState; onCancel: () => void }) {
+export default function Progress({ run, onCancel, onResume }: { run: RunState; onCancel: () => void; onResume: () => void }) {
   const active = ACTIVE_STATUSES.has(run.status);
   const c = run.counts;
   const total = run.stages.length || 6;
@@ -64,6 +64,14 @@ export default function Progress({ run, onCancel }: { run: RunState; onCancel: (
       {active && (
         <div style={{ marginTop: 14 }}>
           <button className="danger" onClick={onCancel}>■ Cancel run (kill switch)</button>
+        </div>
+      )}
+      {(run.status === "failed" || run.status === "interrupted") && (
+        <div style={{ marginTop: 14 }}>
+          <button className="primary" onClick={onResume}>↻ Resume from where it stopped</button>
+          <span className="muted" style={{ marginLeft: 10 }}>
+            re-runs the failed stage onward; completed stages and cost are kept
+          </span>
         </div>
       )}
     </div>
