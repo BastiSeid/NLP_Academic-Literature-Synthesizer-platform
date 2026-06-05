@@ -82,10 +82,10 @@ never reach out, write, or exceed its lane.
   Verifier checks each claim-citation pair against the Reader's notes; unsupported claims are
   routed **back to the Reader/Synthesizer** (bounded to 2 rounds). After the cap, remaining
   unsupported claims are **explicitly marked `⚠UNVERIFIED`**, never silently presented as
-  verified. Three invariants are enforced in Python regardless of model output: (A1) a
-  rejected source never appears in the review; (A2/A3) a claim is never attributed to a source
-  that doesn't support it and an unverified claim is never shown as verified; this is the gate
-  on every run.
+  verified. Code-level invariants are enforced regardless of model output and asserted on every
+  run: (A1) a rejected (or non-kept) source never appears in the review's citations; (A3) an
+  unverified claim is never silently presented as verified — it must carry the `⚠UNVERIFIED`
+  mark; and (A4) the per-run cost cap is a hard stop. This is the gate on every run.
 - **Subagents with isolated context.** One monolithic prompt would let early raw PDF dumps rot
   the context and blur responsibilities. Instead each stage is a fresh `claude` process with
   exactly the context it needs; finished stages are summarized to the datastore; the
@@ -97,12 +97,17 @@ never reach out, write, or exceed its lane.
   to analyze, not a command.
 - **Guardrails as hard stops.** Cost cap, wall-clock timeout, max-steps, capped re-search /
   verifier rounds, and a kill switch are enforced in `guards.py` and checked before every agent
-  call and between stages — the cost cap is a hard ceiling, not advisory.
+  call and between stages — the cost cap is a hard ceiling, not advisory. Because run state is
+  checkpointed after every stage, a stopped run (failure, interrupt, or cap) can be **resumed**
+  from its first not-done stage rather than restarting — completed stages and accrued cost are kept.
 - **Trade-offs.** (1) Each `claude` CLI call carries ~$0.5 / ~12s system overhead, so we
   **batch** where it's faithful (the Gatekeeper screens all candidates in one call) and only go
-  per-paper for the Reader, where isolated context genuinely matters. (2) `arxiv`/Semantic
-  Scholar rate-limit aggressively from shared IPs; clients retry politely and **degrade
-  gracefully to `[]`** rather than failing the run — OpenAlex + web keep results flowing.
+  per-paper for the Reader, where isolated context genuinely matters. (2) Free scholarly APIs
+  rate-limit aggressively; the shared GET client **honors `Retry-After`** and otherwise backs off
+  exponentially (jittered, capped) before **degrading gracefully to `[]`** rather than failing the
+  run. arXiv additionally blocks at the **IP level** from some networks (and sends no `Retry-After`),
+  so it can yield nothing there — Semantic Scholar (which also surfaces arXiv preprints) and OpenAlex
+  keep results flowing.
 
 ---
 
@@ -116,8 +121,8 @@ never reach out, write, or exceed its lane.
 | Source clients | **httpx + feedparser + BeautifulSoup + pypdf** | Read-only GET clients for arXiv (Atom), Semantic Scholar, OpenAlex, DuckDuckGo HTML, and PDF/HTML text extraction. |
 | Persistence | **SQLite (stdlib)** | Zero-config, user-controlled; full run state checkpointed as JSON after every stage → survives restart / page reload. |
 | Frontend | **React + TypeScript + Vite** | Fast SPA; polls run state; tabbed results. |
-| Rendering | **marked + DOMPurify + Mermaid.js** | Sanitized markdown, client-side Mermaid with SVG/PNG export. |
-| Model | **Opus 4.8** (`LITSYNTH_MODEL`, default `claude-opus-4-8`) | Strongest reasoning for screening/synthesis/verification; configurable via env. |
+| Rendering | **marked + DOMPurify + Mermaid.js** | Sanitized markdown; client-side Mermaid with pan/zoom + fullscreen and SVG/PNG/.mmd export. |
+| Model | **Opus 4.8** (`LITSYNTH_MODEL`, default `claude-opus-4-8`) | Strongest reasoning for screening/synthesis/verification; set the server default via env, or pick per run from a UI dropdown (Opus 4.8 / Sonnet 4.6 / Haiku 4.5). |
 
 ---
 
@@ -154,19 +159,25 @@ cd litsynth/frontend && npm install && npm run dev
 ```
 
 ### Run a query
-1. **New Run** → type a broad question → (optional) open **Advanced parameters**
+1. **New Run** → type a broad question → choose a **model** for the run (dropdown; blank = server
+   default) → (optional) open **Advanced parameters**
    (`date_range`, `max_candidates`, `max_kept`, source toggles, `export_dir`, cost cap) → **Start**.
-2. **Pipeline progress** shows the six stages live, with candidate/kept/rejected counts,
-   per-run cost + token usage, and a **Cancel** button (the kill switch).
+2. **Pipeline progress** shows the six stages live behind a determinate **progress bar** (percentage
+   + current-stage caption), with candidate/kept/rejected counts, per-run cost + token usage, and a
+   **Cancel** button (the kill switch). Each stage row **expands** to a per-agent summary of what it
+   produced — sub-questions + search terms, per-source candidate counts, rejection-reason tallies,
+   reader-note counts, themes, and citation verdicts. A failed/interrupted run shows a **Resume** button.
 3. At the **approval gate**, review the sub-questions, search terms, and source list →
    **Approve** or **Revise** (edit, then resubmit). Nothing is searched until you act.
 4. **Results** tabs: **Literature Review** (sanitized markdown with working inline citation
    links + verified/unverified badges), **Rejection Log** (sortable table), **Citations**
-   (BibTeX + JSON, copy/download), **Visual Synthesis** (Mermaid, export SVG/PNG/.mmd).
-   Deliverables are also written to `export_dir/<run_id>/`.
+   (BibTeX + JSON, copy/download), **Visual Synthesis** (Mermaid with pan/zoom + fullscreen,
+   export SVG/PNG/.mmd). Deliverables are also written to `export_dir/<run_id>/`.
 
 Run state persists in SQLite, so progress and results survive a page reload, and past
-runs are reopenable from **Runs History**.
+runs are reopenable from **Runs History**. A run that **failed or was interrupted** can be
+**resumed** from its first not-done stage — completed stages and accumulated cost are kept, and a
+run paused at the approval gate returns to the gate rather than auto-spending.
 
 ---
 
@@ -176,7 +187,8 @@ See [`backend/.env.example`](backend/.env.example). Key knobs:
 
 | Var | Default | Meaning |
 |-----|---------|---------|
-| `LITSYNTH_MODEL` | `claude-opus-4-8` | Model for all agents. |
+| `LITSYNTH_MODEL` | `claude-opus-4-8` | Default model for all agents (the server default). |
+| `LITSYNTH_AVAILABLE_MODELS` | Opus 4.8 / Sonnet 4.6 / Haiku 4.5 | Comma-separated models offered in the New Run dropdown; exposed via `/health`. |
 | `LITSYNTH_COST_CAP_USD` | `40` | Hard per-run cost ceiling (kill switch). Overridable per run in the UI. |
 | `LITSYNTH_RUN_TIMEOUT` | `3600` | Wall-clock stop condition (s). |
 | `LITSYNTH_MAX_STEPS` | `200` | Max agent calls before forced stop. |
