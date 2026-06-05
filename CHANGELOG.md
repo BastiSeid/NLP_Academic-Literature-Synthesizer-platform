@@ -23,6 +23,8 @@ and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2
   through every agent call for that run.
 - **Pipeline progress bar** — the run view shows a determinate stage-progress bar with a
   percentage and current-stage caption, alongside the existing live counts.
+- **Zoomable visual synthesis** — the synthesis diagram is now pan/zoomable (mouse wheel +
+  buttons), with reset and a fullscreen view (Esc to exit), making busy graphs readable.
 
 ### Changed
 - **Run view shows the full research question** instead of truncating it to 70 characters.

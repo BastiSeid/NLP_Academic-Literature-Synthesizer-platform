@@ -97,6 +97,12 @@ th:hover { color: var(--text); }
 .badge.failed,.badge.cancelled,.badge.interrupted { color: var(--red); border-color: var(--red); }
 .badge.awaiting_approval { color: var(--amber); border-color: var(--amber); }
 .error { color: var(--red); background: #2a1518; border: 1px solid var(--red); border-radius: 8px; padding: 10px 12px; }
-.mermaid-wrap { background: #fff; border-radius: 8px; padding: 12px; overflow: auto; }
+.mermaid-viewport { position: relative; background: #fff; border-radius: 8px; height: 460px; overflow: hidden; cursor: grab; }
+.mermaid-viewport:active { cursor: grabbing; }
+.mermaid-viewport.fs { position: fixed; inset: 0; height: auto; z-index: 1000; border-radius: 0; }
+.mermaid-stage { transform-origin: 0 0; padding: 12px; }
+.mermaid-controls { position: absolute; top: 10px; right: 10px; display: flex; gap: 6px; align-items: center; background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 4px 6px; }
+.mermaid-controls button { padding: 3px 9px; }
+.mermaid-zoomlabel { font-size: 11px; color: var(--muted); min-width: 40px; text-align: center; }
 .list-edit { display:flex; flex-direction:column; gap:6px; }
 .list-edit .li { display:flex; gap:6px; }
