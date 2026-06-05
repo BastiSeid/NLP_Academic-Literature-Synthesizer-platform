@@ -62,6 +62,47 @@ class RunManager:
         ctx.cancel_event.set()
         return True
 
+    async def resume(self, run_id: str) -> bool:
+        """Resume a failed/interrupted run from its first not-done stage, reusing
+        the checkpointed state (and accumulated cost). Returns False if the run is
+        unknown or not in a resumable state."""
+        ctx = self._runs.get(run_id)
+        if ctx is None:
+            raw = db.load_state(run_id)
+            if not raw:
+                return False
+            ctx = RunContext(RunState.model_validate_json(raw))
+            self._runs[run_id] = ctx
+        st = ctx.state
+        if st.status not in ("failed", "interrupted"):
+            return False  # guard: only a stuck run can be resumed
+
+        # fresh control handles; clear the prior failure marks
+        ctx.cancel_event.clear()
+        ctx.start_time = __import__("time").monotonic()
+        st.error = ""
+        for s in st.stages:
+            if s.status == "failed":
+                s.status = "pending"
+                s.detail = ""
+
+        if not _stage_done(st, "scope"):
+            # scoping never completed → re-scope back to the approval gate
+            st.status = "created"; self._save(ctx)
+            asyncio.create_task(asyncio.to_thread(self._run_until_gate, ctx))
+        elif st.approved:
+            # approved → resume heavy phases; _run_after_gate skips done stages
+            order = [("search", "searching"), ("screen", "screening"),
+                     ("extract", "extracting"), ("synthesize", "synthesizing"),
+                     ("verify", "verifying")]
+            st.status = next((s for n, s in order if not _stage_done(st, n)), "assembling")
+            self._save(ctx)
+            asyncio.create_task(asyncio.to_thread(self._run_after_gate, ctx))
+        else:
+            # interrupted while waiting at the gate → restore the gate, don't auto-spend
+            st.status = "awaiting_approval"; self._save(ctx)
+        return True
+
     # ── gate: scoping then pause ─────────────────────────────────────────────
     async def start(self, run_id: str) -> None:
         ctx = self._runs[run_id]
@@ -105,20 +146,25 @@ class RunManager:
     def _run_after_gate(self, ctx: RunContext) -> None:
         st = ctx.state
         try:
-            st.status = "searching"; self._save(ctx)
-            stages.stage_search(ctx, self._save)
+            if not _stage_done(st, "search"):
+                st.status = "searching"; self._save(ctx)
+                stages.stage_search(ctx, self._save)
 
-            st.status = "screening"; self._save(ctx)
-            stages.stage_screen(ctx, self._save)
+            if not _stage_done(st, "screen"):
+                st.status = "screening"; self._save(ctx)
+                stages.stage_screen(ctx, self._save)
 
-            st.status = "extracting"; self._save(ctx)
-            stages.stage_extract(ctx, self._save)
+            if not _stage_done(st, "extract"):
+                st.status = "extracting"; self._save(ctx)
+                stages.stage_extract(ctx, self._save)
 
-            st.status = "synthesizing"; self._save(ctx)
-            stages.stage_synthesize(ctx, self._save)
+            if not _stage_done(st, "synthesize"):
+                st.status = "synthesizing"; self._save(ctx)
+                stages.stage_synthesize(ctx, self._save)
 
-            st.status = "verifying"; self._save(ctx)
-            self._verify_loop(ctx)
+            if not _stage_done(st, "verify"):
+                st.status = "verifying"; self._save(ctx)
+                self._verify_loop(ctx)
 
             st.status = "assembling"; self._save(ctx)
             self._finalize(ctx)
@@ -220,6 +266,13 @@ class RunManager:
             s.detail = "cancelled"
         st.status = "cancelled"
         self._save(ctx)
+
+
+def _stage_done(st: RunState, name: str) -> bool:
+    try:
+        return st.stage(name).status == "done"
+    except KeyError:
+        return False
 
 
 def _phase_of(st: RunState) -> str:

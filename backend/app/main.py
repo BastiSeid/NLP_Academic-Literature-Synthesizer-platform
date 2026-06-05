@@ -87,6 +87,15 @@ def cancel_run(run_id: str):
     return {"cancelled": True}
 
 
+@app.post("/api/runs/{run_id}/resume")
+async def resume_run(run_id: str):
+    if not manager.get_state(run_id):
+        raise HTTPException(404, "run not found")
+    if not await manager.resume(run_id):
+        raise HTTPException(409, "run is not resumable (must be failed or interrupted)")
+    return manager.get_state(run_id)
+
+
 _EXPORTS = {
     "review": ("review_markdown", "text/markdown"),
     "mermaid": ("mermaid", "text/plain"),

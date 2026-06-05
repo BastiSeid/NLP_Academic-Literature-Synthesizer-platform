@@ -13,6 +13,7 @@ export default function App() {
   const [runId, setRunId] = useState<string | null>(null);
   const [run, setRun] = useState<RunState | null>(null);
   const [model, setModel] = useState<string>("");
+  const [pollNonce, setPollNonce] = useState(0);
   const timer = useRef<number | null>(null);
 
   useEffect(() => { api.health().then((h) => setModel(h.model)).catch(() => {}); }, []);
@@ -38,7 +39,7 @@ export default function App() {
     };
     tick();
     return () => { stop = true; if (timer.current) window.clearTimeout(timer.current); };
-  }, [runId, view, refresh]);
+  }, [runId, view, refresh, pollNonce]);
 
   const openRun = (id: string) => { setRunId(id); setRun(null); setView("run"); };
 
@@ -58,7 +59,9 @@ export default function App() {
       {view === "history" && <RunsHistory onOpen={openRun} />}
       {view === "run" && run && (
         <>
-          <Progress run={run} onCancel={async () => { await api.cancel(run.id); refresh(run.id); }} />
+          <Progress run={run}
+            onCancel={async () => { await api.cancel(run.id); refresh(run.id); }}
+            onResume={async () => { const r = await api.resume(run.id); setRun(r); setPollNonce((n) => n + 1); }} />
           {run.status === "awaiting_approval" && (
             <ApprovalGate run={run} onChanged={() => refresh(run.id)} />
           )}

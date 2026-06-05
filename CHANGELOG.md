@@ -23,8 +23,11 @@ and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2
   through every agent call for that run.
 - **Pipeline progress bar** — the run view shows a determinate stage-progress bar with a
   percentage and current-stage caption, alongside the existing live counts.
-- **Zoomable visual synthesis** — the synthesis diagram is now pan/zoomable (mouse wheel +
-  buttons), with reset and a fullscreen view (Esc to exit), making busy graphs readable.
+- **One-click resume** — a failed or interrupted run can be resumed from its first not-done
+  stage via `POST /api/runs/{id}/resume` and a Resume button in the run view. Completed
+  stages and accumulated cost are kept (the cost cap continues); the failed stage onward
+  re-runs. Interrupted runs paused at the approval gate return to the gate rather than
+  auto-spending.
 
 ### Changed
 - **Run view shows the full research question** instead of truncating it to 70 characters.
