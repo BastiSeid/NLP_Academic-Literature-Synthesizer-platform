@@ -24,6 +24,10 @@ export interface Candidate {
 export interface RejectionEntry {
   source_id: string; title: string; reason_code: string; justification: string;
 }
+export interface ReaderNote {
+  source_id: string; claim: string; evidence: string;
+  location: string; note_type: "claim" | "method" | "finding";
+}
 export interface CitationRef { marker: string; source_id: string; claim: string; }
 export interface CitationVerdict { marker: string; source_id: string; claim: string; supported: boolean; reason: string; }
 export interface SynthOutput {
@@ -39,6 +43,7 @@ export interface RunState {
   stages: Stage[]; counts: Counts;
   scope_plan: ScopePlan | null; plan_source_set: string[]; approved: boolean;
   candidates: Candidate[]; kept_ids: string[]; rejections: RejectionEntry[];
+  notes: Record<string, ReaderNote[]>;
   synth: SynthOutput | null;
   verdicts: CitationVerdict[];
   outputs: Outputs;

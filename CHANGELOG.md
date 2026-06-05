@@ -17,6 +17,15 @@ and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2
 ## [Unreleased]
 
 ### Added
+- **Expandable per-agent stage summaries** — each row in the pipeline view now
+  expands (click to toggle, animated chevron) to reveal a human-readable summary
+  of what that agent produced: the Scout's sub-questions and search terms, the
+  Scout's per-source candidate breakdown, the Gatekeeper's kept/rejected counts
+  and rejection-reason tally, the Reader's note counts per source, the
+  Synthesizer's themes / citation count / draft length, and the Verifier's
+  supported-vs-unsupported tally and re-read rounds. All derived client-side from
+  existing run state — no backend changes, no added cost. Each row also labels the
+  agent that ran it (Scout / Gatekeeper / Reader / Synthesizer / Verifier).
 - **Per-run model selector** — the New Run screen now offers a model dropdown
   (Opus 4.8 / Sonnet 4.6 / Haiku 4.5; blank = server default). Options are served by the
   backend (`LITSYNTH_AVAILABLE_MODELS`, exposed via `/health`) and the choice is threaded
