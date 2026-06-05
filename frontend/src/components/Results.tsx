@@ -143,7 +143,12 @@ function Citations({ run }: { run: RunState }) {
 
 function Synthesis({ run }: { run: RunState }) {
   const ref = useRef<HTMLDivElement>(null);
+  const viewportRef = useRef<HTMLDivElement>(null);
   const [err, setErr] = useState("");
+  const [zoom, setZoom] = useState(1);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const [fs, setFs] = useState(false);
+  const drag = useRef<{ x: number; y: number } | null>(null);
   const code = run.outputs.mermaid || run.synth?.mermaid || "graph TD\n  A[No diagram]";
 
   useEffect(() => {
@@ -153,6 +158,35 @@ function Synthesis({ run }: { run: RunState }) {
       .catch((e) => alive && setErr(String(e?.message || e)));
     return () => { alive = false; };
   }, [code, run.id]);
+
+  // Wheel zoom via a non-passive listener so the page doesn't scroll.
+  useEffect(() => {
+    const el = viewportRef.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      setZoom((z) => Math.min(5, Math.max(0.2, z * (e.deltaY < 0 ? 1.1 : 0.9))));
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, []);
+
+  // Escape exits fullscreen.
+  useEffect(() => {
+    if (!fs) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setFs(false); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [fs]);
+
+  const onDown = (e: { clientX: number; clientY: number }) => {
+    drag.current = { x: e.clientX - pan.x, y: e.clientY - pan.y };
+  };
+  const onMove = (e: { clientX: number; clientY: number }) => {
+    if (drag.current) setPan({ x: e.clientX - drag.current.x, y: e.clientY - drag.current.y });
+  };
+  const onUp = () => { drag.current = null; };
+  const reset = () => { setZoom(1); setPan({ x: 0, y: 0 }); };
 
   const exportSVG = () => {
     const svg = ref.current?.querySelector("svg");
@@ -179,7 +213,18 @@ function Synthesis({ run }: { run: RunState }) {
   return (
     <>
       {err && <div className="error">Mermaid error: {err}</div>}
-      <div className="mermaid-wrap" ref={ref} />
+      <div className={"mermaid-viewport" + (fs ? " fs" : "")} ref={viewportRef}
+        onMouseDown={onDown} onMouseMove={onMove} onMouseUp={onUp} onMouseLeave={onUp}>
+        <div className="mermaid-stage" ref={ref}
+          style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})` }} />
+        <div className="mermaid-controls" onMouseDown={(e) => e.stopPropagation()}>
+          <button onClick={() => setZoom((z) => Math.min(5, z * 1.2))} title="Zoom in">＋</button>
+          <button onClick={() => setZoom((z) => Math.max(0.2, z / 1.2))} title="Zoom out">－</button>
+          <span className="mermaid-zoomlabel">{Math.round(zoom * 100)}%</span>
+          <button onClick={reset} title="Reset view">⟳</button>
+          <button onClick={() => setFs((v) => !v)} title={fs ? "Exit fullscreen (Esc)" : "Fullscreen"}>{fs ? "✕" : "⛶"}</button>
+        </div>
+      </div>
       <div className="row" style={{ marginTop: 12 }}>
         <button onClick={exportSVG}>⬇ Export SVG</button>
         <button onClick={exportPNG}>⬇ Export PNG</button>
