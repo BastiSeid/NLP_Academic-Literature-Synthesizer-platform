@@ -39,6 +39,13 @@ and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2
   auto-spending.
 
 ### Changed
+- **More resilient source rate-limit handling** — the shared read-only HTTP helper now
+  honors a server's `Retry-After` header on `429`/`503` and otherwise uses jittered
+  exponential backoff, with a per-sleep cap so a hard rate-limit never stalls a request.
+  Improves transient-throttle recovery across all sources (Semantic Scholar, OpenAlex,
+  web). Note: arXiv's export API blocks at the IP level from some networks and sends no
+  `Retry-After`, so it still degrades gracefully to no results there — those papers
+  continue to arrive via Semantic Scholar and OpenAlex.
 - **Run view shows the full research question** instead of truncating it to 70 characters.
 
 ---
