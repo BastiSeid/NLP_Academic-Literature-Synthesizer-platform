@@ -54,14 +54,25 @@ details summary { cursor: pointer; color: var(--accent); margin-bottom: 12px; }
 
 /* pipeline */
 .stages { display: flex; flex-direction: column; gap: 8px; }
-.stage { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--panel-2); }
+.stage { border: 1px solid var(--border); border-radius: 10px; background: var(--panel-2); overflow: hidden; }
+.stage-head { display: flex; align-items: center; gap: 12px; width: 100%; padding: 10px 12px; background: none; border: 0; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.stage-head:hover { background: rgba(255,255,255,.03); }
 .stage .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--muted); flex: none; }
 .stage.running .dot { background: var(--accent); animation: pulse 1s infinite; }
 .stage.done .dot { background: var(--green); }
 .stage.failed .dot { background: var(--red); }
 .stage.skipped .dot { background: var(--amber); }
 .stage .name { font-weight: 600; width: 150px; text-transform: capitalize; }
-.stage .detail { color: var(--muted); font-size: 13px; }
+.stage .detail { color: var(--muted); font-size: 13px; flex: 1; }
+.stage .agent { color: var(--muted); font-size: 12px; opacity: .8; }
+.stage .chevron { color: var(--muted); transition: transform .15s ease; flex: none; }
+.stage .chevron.open { transform: rotate(90deg); }
+.stage-body { padding: 4px 14px 14px 34px; font-size: 13px; border-top: 1px solid var(--border); }
+.stage-body ul { margin: 4px 0; padding-left: 18px; }
+.stage-body li { margin: 2px 0; }
+.summlabel { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 8px 0 4px; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.summchip { font-size: 12px; padding: 2px 8px; border: 1px solid var(--border); border-radius: 999px; background: var(--panel); color: var(--text); }
 @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .35; } }
 .metrics { display: flex; gap: 10px; flex-wrap: wrap; margin: 14px 0; }
 .metric { background: var(--panel-2); border: 1px solid var(--border); border-radius: 10px; padding: 10px 14px; min-width: 90px; }
