@@ -12,7 +12,7 @@ from ..schemas import (
 )
 from ..agents import prompts
 from ..agent_runner import run_structured
-from ..sources import arxiv, semantic_scholar, openalex, web, fetch, dedupe
+from ..sources import arxiv, semantic_scholar, openalex, crossref, web, fetch, dedupe
 from ..config import config
 
 Save = Callable[["object"], None]
@@ -21,6 +21,7 @@ _SOURCE_FUNCS = {
     "arxiv": arxiv.search,
     "semantic_scholar": semantic_scholar.search,
     "openalex": openalex.search,
+    "crossref": crossref.search,
     "web": web.search,
 }
 
@@ -72,6 +73,7 @@ def stage_search(ctx, save: Save) -> None:
     per_source = max(8, st.params.max_candidates // max(1, len(sources)) + 5)
 
     gathered: List[Candidate] = []
+    per_source_counts: dict[str, int] = {}
     for src in sources:
         ctx.check()
         fn = _SOURCE_FUNCS.get(src)
@@ -82,7 +84,12 @@ def stage_search(ctx, save: Save) -> None:
         except Exception:
             results = []
         gathered.extend(results)
-        st.stage("search").detail = f"{src}: +{len(results)}"
+        per_source_counts[src] = len(results)
+        # Cumulative breakdown so every source's contribution stays visible
+        # (a single overwriting line hid that arxiv/s2/web also found papers).
+        st.stage("search").detail = ", ".join(
+            f"{s}: {per_source_counts[s]}" for s in sources if s in per_source_counts
+        )
         save(ctx)
 
     gathered = [c for c in gathered if _in_date_range(c, st.params.date_range)]
@@ -90,7 +97,10 @@ def stage_search(ctx, save: Save) -> None:
     st.candidates = merged
     st.counts.candidates = len(merged)
     st.stage("search").status = "done"
-    st.stage("search").detail = f"{len(merged)} candidates ({len(gathered)} pre-dedupe)"
+    breakdown = ", ".join(f"{s}: {per_source_counts.get(s, 0)}" for s in sources)
+    st.stage("search").detail = (
+        f"{len(merged)} candidates ({len(gathered)} pre-dedupe) — {breakdown}"
+    )
     save(ctx)
 
 

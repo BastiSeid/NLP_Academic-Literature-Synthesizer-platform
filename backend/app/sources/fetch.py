@@ -26,25 +26,42 @@ def _html_text(html: str) -> str:
     return soup.get_text(" ", strip=True)
 
 
+def _arxiv_html_url(candidate: Candidate) -> str | None:
+    if candidate.source == "arxiv" and candidate.identifier:
+        return f"https://arxiv.org/html/{candidate.identifier}"
+    return None
+
+
 def _arxiv_pdf_url(candidate: Candidate) -> str | None:
     if candidate.source == "arxiv" and candidate.identifier:
-        aid = candidate.identifier.split("v")[0]
         return f"https://arxiv.org/pdf/{candidate.identifier}"
     return None
 
 
 def fetch_text(candidate: Candidate) -> str:
-    """Best-effort full text; falls back to the abstract if retrieval fails."""
-    urls = []
-    pdf = _arxiv_pdf_url(candidate)
-    if pdf:
-        urls.append(pdf)
-    if candidate.url:
-        urls.append(candidate.url)
-    if candidate.identifier.startswith("10."):
-        urls.append(f"https://doi.org/{candidate.identifier}")
+    """Best-effort full text; falls back to the abstract if retrieval fails.
 
-    for url in urls:
+    HTML is preferred over PDF: HTML extraction is far cleaner than pypdf (which
+    mangles multi-column layouts, tables, and math), so the Reader gets more
+    faithful text. PDF URLs are tried only after every HTML option fails."""
+    html_urls: list[str] = []
+    pdf_urls: list[str] = []
+
+    arxiv_html = _arxiv_html_url(candidate)
+    if arxiv_html:
+        html_urls.append(arxiv_html)
+    if candidate.url and not candidate.url.lower().endswith(".pdf"):
+        html_urls.append(candidate.url)        # landing/abstract page — usually HTML
+    if candidate.identifier.startswith("10."):
+        html_urls.append(f"https://doi.org/{candidate.identifier}")  # resolves to HTML
+
+    arxiv_pdf = _arxiv_pdf_url(candidate)
+    if arxiv_pdf:
+        pdf_urls.append(arxiv_pdf)
+    if candidate.url and candidate.url.lower().endswith(".pdf"):
+        pdf_urls.append(candidate.url)
+
+    for url in html_urls + pdf_urls:
         try:
             resp = get(url, timeout=30.0)
             if resp.status_code != 200:

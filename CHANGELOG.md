@@ -17,6 +17,16 @@ and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2
 ## [Unreleased]
 
 ### Added
+- **Crossref source** — added `app/sources/crossref.py`, the DOI backbone (~150M
+  works across every discipline) as a fifth scout source, wired into the default
+  `source_set` and the search stage. JATS abstracts are stripped to plain text and
+  it joins Crossref's polite pool when a contact email is configured.
+- **Honest cross-source attribution** — candidates now carry `merged_from`, the list
+  of *every* source that found a paper, not just the one whose copy survived dedupe.
+  Previously dedupe kept the richest-abstract record (almost always OpenAlex), making
+  it look as if only OpenAlex ever contributed; the other sources' hits were silently
+  merged away.
+
 - **Note-grounding gate (Stage 4)** — every Reader note is now verified against its
   own paper's full text (reused in-memory from the read — no re-fetch) and dropped if it
   is not traceable to the source, guarding against hallucinated/embellished notes before
@@ -50,6 +60,14 @@ and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2
   auto-spending.
 
 ### Changed
+- **HTML-first full-text reading (Reader)** — `fetch.py` now prefers an HTML version
+  of each paper (including `arxiv.org/html/{id}`) and only falls back to PDF parsing
+  when no HTML is available. HTML extraction is far cleaner than pypdf, which mangles
+  multi-column layouts, tables, and math, so the Reader receives more faithful text.
+- **Search stage shows a cumulative per-source breakdown** — the search progress detail
+  now reports every source's contribution (e.g. `arxiv: 12, semantic_scholar: 18,
+  openalex: 22, crossref: 15, web: 9`) instead of an overwriting line that only ever
+  displayed the last source's count.
 - **Screening now runs two independent screeners** with opposing dispositions — strict
   (precision-oriented, rejects when in doubt) and lenient (recall-oriented, keeps when in
   doubt) — each deciding keep/reject for *every* candidate, reconciled before the `max_kept`

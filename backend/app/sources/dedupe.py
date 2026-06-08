@@ -17,6 +17,7 @@ def _norm_doi(c: Candidate) -> str | None:
 
 def dedupe(cands: List[Candidate]) -> List[Candidate]:
     by_key: dict[str, Candidate] = {}
+    contributors: dict[str, list[str]] = {}
     order: List[str] = []
     for c in cands:
         key = _norm_doi(c) or _norm_title(c.title)
@@ -31,4 +32,14 @@ def dedupe(cands: List[Candidate]) -> List[Candidate]:
         else:
             by_key[key] = c
             order.append(key)
-    return [by_key[k] for k in order]
+        # Track every source that found this paper, even if its copy was merged
+        # away — otherwise dedupe makes it look like only the winning source
+        # (usually OpenAlex, which has the richest abstracts) ever contributed.
+        if c.source and c.source not in contributors.setdefault(key, []):
+            contributors[key].append(c.source)
+    out: List[Candidate] = []
+    for k in order:
+        c = by_key[k]
+        c.merged_from = contributors[k]
+        out.append(c)
+    return out

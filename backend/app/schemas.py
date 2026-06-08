@@ -12,7 +12,7 @@ class RunParams(BaseModel):
     max_candidates: int = 80
     max_kept: int = 25
     source_set: List[str] = Field(
-        default_factory=lambda: ["arxiv", "semantic_scholar", "openalex", "web"]
+        default_factory=lambda: ["arxiv", "semantic_scholar", "openalex", "crossref", "web"]
     )
     export_dir: Optional[str] = None
     cost_cap_usd: Optional[float] = None        # overrides global default if set
@@ -41,8 +41,9 @@ class Candidate(BaseModel):
     abstract: str = ""
     identifier: str = ""                         # DOI / arXiv id / URL
     url: str = ""
-    source: str = ""                             # arxiv | semantic_scholar | openalex | web
+    source: str = ""                             # primary (surviving) source after dedupe
     score: Optional[float] = None
+    merged_from: List[str] = Field(default_factory=list)  # all sources that found this paper
 
 
 # ── Stage 3: Gatekeeper output ───────────────────────────────────────────────
