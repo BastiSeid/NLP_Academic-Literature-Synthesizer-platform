@@ -1,9 +1,10 @@
 # 📚 Academic Literature Synthesizer
 
 A runnable **multi-agent web platform**. Enter a broad research question; a six-stage
-pipeline of specialized agents scopes it, searches the scholarly web, screens out the
-weak work, deep-reads what survives, synthesizes a themed review, and **verifies every
-citation against its source** before assembly. You get four deliverables — a
+pipeline of specialized agents scopes it, searches the scholarly web, **double-screens**
+out the weak work (two adversarial screeners + an arbiter), deep-reads what survives and
+**fact-checks every extracted note against its own paper**, synthesizes a themed review,
+and **verifies every citation against its source** before assembly. You get four deliverables — a
 citation-verified literature review, a rejection log, a machine-readable citations
 export, and a visual synthesis diagram — all rendered in the UI and exportable.
 
@@ -19,8 +20,12 @@ SQLite datastore and to your export folder.
 ## Architecture — the six-stage pipeline
 
 The **Orchestrator** delegates through six stages. An **approval gate** fires after
-scoping (a UI step). The **Gatekeeper** writes every exclusion to a rejection log. The
-**Verifier** loops unsupported claims back before assembly.
+scoping (a UI step). Screening is **doubly judged** — a strict and a lenient screener
+decide independently and an **Arbiter** reconciles their disagreements — and every
+exclusion is written to a rejection log. The **Reader's** notes pass a **grounding gate**
+(each note must trace back to its own paper) before synthesis, and the Stage-6 **Verifier**
+loops unsupported claims back before assembly. Two verification layers at the two
+highest-impact points (screening, extraction), plus the final citation check.
 
 ```mermaid
 flowchart TD
@@ -29,10 +34,15 @@ flowchart TD
     SCOPE --> GATE{"Approval gate: user reviews plan and source list before the expensive phases run"}
     GATE -- revise --> SCOPE
     GATE -- approve --> SEARCH["2 - Search and retrieve (Scout): arXiv, Semantic Scholar, OpenAlex, web"]
-    SEARCH --> SCREEN["3 - Screen and reject (Gatekeeper): relevance and quality filter"]
-    SCREEN -- "excluded + reason" --> REJLOG[("Rejection log: the moat is what's rejected")]
-    SCREEN -- "kept papers" --> EXTRACT["4 - Deep read and extract (Reader): claims, methods, findings, per-source notes"]
-    EXTRACT --> SYNTH["5 - Synthesize (Synthesizer): themes, consensus vs dispute, open gaps"]
+    SEARCH --> SCR_S["3 - Screen STRICT (Gatekeeper, precision): reject when in doubt"]
+    SEARCH --> SCR_L["3 - Screen LENIENT (Gatekeeper, recall): keep when in doubt"]
+    SCR_S --> ARB{"3 - Arbiter: reconcile disagreements (fast-path if both agree)"}
+    SCR_L --> ARB
+    ARB -- "excluded + reason" --> REJLOG[("Rejection log: the moat is what's rejected")]
+    ARB -- "kept papers" --> EXTRACT["4 - Deep read and extract (Reader): claims, methods, findings + verbatim quote, per-source notes"]
+    EXTRACT --> NGATE{"4 - Note-grounding gate: is each note traceable to its own paper's text?"}
+    NGATE -- "ungrounded: drop note" --> DROP[("Dropped notes (audited)")]
+    NGATE -- "grounded notes" --> SYNTH["5 - Synthesize (Synthesizer): themes, consensus vs dispute, open gaps"]
     SYNTH --> VERIFY{"6 - Verify citations (Verifier): does each source actually back its claim?"}
     VERIFY -- "unsupported: send back" --> EXTRACT
     VERIFY -- "all check out" --> OUT["Assemble outputs"]
@@ -55,8 +65,11 @@ a single responsibility, and a narrow tool scope. Each agent's output is **schem
 | 0 | **Orchestrator** | Owns the run end-to-end; routes the six stages; enforces stop conditions, cost cap, and invariants; pauses at the gate; assembles + validates the four deliverables. | None external — pure delegation + assembly (Python). | The four deliverables. |
 | 1 | **Scout (scope)** | Expand the broad query into sub-questions and search terms. | None (reasoning). | `ScopePlan` — sub-questions, terms. |
 | 2 | **Scout (retrieve)** | Maximize recall of relevant/seminal/newest work. | arXiv, Semantic Scholar, OpenAlex, web — **HTTP GET only**. Deterministic Python clients. | `Candidate[]` with full metadata. |
-| 3 | **Gatekeeper** | Score every candidate on relevance + quality; keep the strongest, reject the rest (expect a high rejection rate). | None (judgment over metadata/abstracts). | kept ids + `RejectionEntry[]` (reason_code + justification). |
-| 4 | **Reader** | Deep-read each kept paper; extract faithful claims/methods/findings with exact locations. No invention. | PDF/HTML fetch (read-only) → text handed to a reasoning agent. | `ReaderNote[]` (claim, evidence, location, source_id). |
+| 3a | **Gatekeeper · strict** (precision) | Judge every candidate on relevance + quality, rejecting when in doubt. | None (judgment over metadata/abstracts). | `ScreenResult` (per-candidate keep/reject + reason). |
+| 3b | **Gatekeeper · lenient** (recall) | Judge every candidate independently, keeping when plausibly relevant. | None (judgment over metadata/abstracts). | `ScreenResult` (per-candidate keep/reject + reason). |
+| 3c | **Arbiter** | Reconcile only the candidates the two screeners disagree on; make the final keep/reject call (fast-path skipped on full agreement). `max_kept` applied after. | None (judgment over the two screeners' decisions). | `ArbiterOutput` + `screen_agreement` signal. |
+| 4 | **Reader** | Deep-read each kept paper; extract faithful claims/methods/findings with exact locations **and a verbatim quote**. No invention. | PDF/HTML fetch (read-only) → text handed to a reasoning agent. | `ReaderNote[]` (claim, evidence, location, quote, source_id). |
+| 4b | **Note Verifier** (grounding gate) | Check each note against its **own paper's full text** (reused in-memory, no re-fetch); drop notes not traceable to the source before synthesis. | Read access to the paper text already fetched in Stage 4. | `NoteVerifyOutput` (binary grounded per note); `dropped_notes`. |
 | 5 | **Synthesizer** | Cluster notes into themes; consensus vs dispute; gaps; draft the review with inline citations; emit the Mermaid landscape. | None (reasoning). | `SynthOutput` — review markdown, mermaid, citations. |
 | 6 | **Verifier** | For each claim-citation pair, confirm the cited source's notes actually support the claim. Route failures back. | Read access to reader notes (passed in context). | `CitationVerdict[]` — pass/fail + reason. |
 
@@ -74,6 +87,23 @@ never reach out, write, or exceed its lane.
   like "transformers" (ML vs electrical) — is the single highest-leverage human-in-the-loop
   point. The pipeline hard-pauses at `awaiting_approval` and will not retrieve until you
   approve or revise.
+- **Two adversarial screeners + an arbiter — the highest-impact error is a *wrongly rejected*
+  paper.** A great paper silently dropped at screening corrupts the whole review and is
+  invisible (you can't see what isn't there); a weak paper wrongly kept is far less harmful and
+  gets caught downstream. So screening runs **two** independent screeners with opposing
+  dispositions — **strict** (precision: reject when in doubt) and **lenient** (recall: keep when
+  in doubt) — each deciding every candidate. Their **disagreements are exactly the borderline
+  papers**, which an **Arbiter** then adjudicates (it can side with either or combine). `max_kept`
+  is applied only *after* reconciliation, so the agreement signal is meaningful rather than a
+  budget artifact. The fast path skips the arbiter entirely when the screeners agree, and the
+  inter-screener `screen_agreement` is recorded for evaluation.
+- **Note-grounding gate — fact-check extraction before it can propagate.** A hallucinated or
+  embellished Reader note becomes a "fact" the Synthesizer cites, so garbage at Stage 4 spreads
+  everywhere. Each note now carries a **verbatim quote** and is checked against its **own paper's
+  full text** (reused in-memory from the read — no re-fetch) by a Note Verifier; only notes
+  **traceable to the source** survive, and dropped notes are audited in `dropped_notes`. This is
+  defense in depth with the Stage-6 Verifier: notes are grounded at extraction, final claims are
+  verified at synthesis.
 - **The rejection log — "the moat is what's rejected."** A review is only as trustworthy as
   what it *excluded*. Every excluded candidate is recorded with a `reason_code` and a one-line
   justification, surfaced as a sortable table and exported. Nothing is silently dropped: a
@@ -101,8 +131,9 @@ never reach out, write, or exceed its lane.
   checkpointed after every stage, a stopped run (failure, interrupt, or cap) can be **resumed**
   from its first not-done stage rather than restarting — completed stages and accrued cost are kept.
 - **Trade-offs.** (1) Each `claude` CLI call carries ~$0.5 / ~12s system overhead, so we
-  **batch** where it's faithful (the Gatekeeper screens all candidates in one call) and only go
-  per-paper for the Reader, where isolated context genuinely matters. (2) Free scholarly APIs
+  **batch** where it's faithful (each screener judges all candidates in one call, and the arbiter
+  fires only on disagreements) and only go per-paper for the Reader and its note-grounding gate,
+  where isolated context genuinely matters. (2) Free scholarly APIs
   rate-limit aggressively; the shared GET client **honors `Retry-After`** and otherwise backs off
   exponentially (jittered, capped) before **degrading gracefully to `[]`** rather than failing the
   run. arXiv additionally blocks at the **IP level** from some networks (and sends no `Retry-After`),
@@ -208,6 +239,13 @@ The eval set lives in [`backend/app/evals/cases.json`](backend/app/evals/cases.j
   Gatekeeper should flag `OVERSTATED` and the Verifier must reject claims the notes don't support.
 - `ambiguous-scope` ("transformers") — ML vs electrical → exactly what the **approval gate** exists for.
 - `tiny-budget` — a $3 cost cap → the run must **hit the cap and halt cleanly** (proving the hard stop).
+
+**Verification is built into the two highest-impact stages**, and each emits a measurable
+signal per run: the **inter-screener agreement** (`screen_agreement` — how often the strict and
+lenient screeners agreed, and how the arbiter resolved the rest) and the **note-grounding drop
+rate** (`notes_grounded` / `notes_dropped` — how many extracted notes failed the Stage-4 source
+check). Together with the Stage-6 citation verdicts, these are the basis for discussing result
+quality.
 
 **Citation verification gates every run inline** — there is no separate verification toggle.
 Run the headless harness (it auto-approves the gate and asserts the hard invariants A1/A3/A4):
