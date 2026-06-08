@@ -21,6 +21,86 @@ def _cite_key(c: Candidate) -> str:
     return f"{first_author.lower()}{year}{title_word}"
 
 
+# ── APA 7th-edition rendering ────────────────────────────────────────────────
+def _apa_author(name: str) -> str:
+    """One author name → APA reference form 'Surname, F. M.'.
+    Falls back to the raw token when a name can't be split (single token)."""
+    parts = name.strip().split()
+    if not parts:
+        return ""
+    if len(parts) == 1:
+        return parts[0]
+    surname = parts[-1]
+    initials = " ".join(f"{p[0].upper()}." for p in parts[:-1] if p)
+    return f"{surname}, {initials}".strip()
+
+
+def _apa_authors(authors: List[str]) -> str:
+    """Join an author list per APA 7 rules: '&' before the final author,
+    and the 21+ rule (first 19, ellipsis, final author)."""
+    names = [_apa_author(a) for a in authors if a and a.strip()]
+    if not names:
+        return ""
+    if len(names) == 1:
+        return names[0]
+    if len(names) <= 20:
+        return ", ".join(names[:-1]) + ", & " + names[-1]
+    # 21+ authors: list the first 19, an ellipsis, then the final author (no '&')
+    return ", ".join(names[:19]) + ", . . . " + names[-1]
+
+
+def _apa_surname_key(c: Candidate) -> str:
+    """Sort key for the reference list: first author's surname, else title."""
+    if c.authors and c.authors[0].strip():
+        return c.authors[0].strip().split()[-1].lower()
+    return (c.title or "").lower()
+
+
+def apa_reference(c: Candidate) -> str:
+    """A single APA 7 reference-list entry. Three shapes: journal article,
+    arXiv preprint, and web/grey literature. Italics use Markdown asterisks."""
+    year = c.year or "n.d."
+    authors = _apa_authors(c.authors)
+    title = (c.title or "").strip().rstrip(".")
+
+    # arXiv preprint
+    if c.source == "arxiv":
+        head = f"{authors} ({year}). " if authors else ""
+        url = c.url or (f"https://arxiv.org/abs/{c.identifier}" if c.identifier else "")
+        eprint = f" (arXiv:{c.identifier})" if c.identifier else ""
+        tail = f" {url}" if url else ""
+        return f"{head}*{title}*{eprint}. arXiv.{tail}".strip()
+
+    # Web / grey literature (often author-less → title takes the author slot)
+    if c.source == "web" or (not c.identifier.startswith("10.") and not c.venue):
+        if authors:
+            head = f"{authors} ({year}). *{title}*."
+        else:
+            head = f"*{title}*. ({year})."
+        tail = f" {c.url}" if c.url else ""
+        return f"{head}{tail}".strip()
+
+    # Journal article / DOI-bearing work
+    head = f"{authors} ({year}). " if authors else f"*{title}*. ({year}). "
+    body = f"{title}. " if authors else ""
+    venue = f"*{c.venue}*. " if c.venue else ""
+    if c.identifier.startswith("10."):
+        link = f"https://doi.org/{c.identifier}"
+    else:
+        link = c.url or ""
+    return f"{head}{body}{venue}{link}".strip().rstrip(".") + ("" if link else ".")
+
+
+def apa_references_section(kept: List[Candidate]) -> str:
+    """The '## References' block, entries sorted alphabetically (APA)."""
+    if not kept:
+        return ""
+    entries = sorted(kept, key=_apa_surname_key)
+    lines = ["## References", ""]
+    lines += [f"- {apa_reference(c)}" for c in entries]
+    return "\n".join(lines) + "\n"
+
+
 def _bibtex_type(c: Candidate) -> str:
     if c.source == "arxiv":
         return "misc"
@@ -74,6 +154,7 @@ def to_citations_json(kept: List[Candidate], verdicts: List[CitationVerdict]) ->
             "url": c.url,
             "source": c.source,
             "bibtex_key": _cite_key(c),
+            "apa": apa_reference(c),
             "verified_claims": backed.get(c.source_id, []),
         })
     return json.dumps(payload, indent=2, ensure_ascii=False)

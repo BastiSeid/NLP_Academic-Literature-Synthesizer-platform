@@ -220,6 +220,12 @@ class RunManager:
         # Invariant A1: rejected sources never appear → cite only kept + verified-or-marked.
         kept_candidates = [by_id[sid] for sid in st.kept_ids if sid in by_id]
 
+        # APA 7 reference list, appended AFTER marker-based verification tagging so the
+        # inline [source_id] markers (which the verifier keys on) stay intact upstream.
+        refs = exporters.apa_references_section(kept_candidates)
+        if refs:
+            review = review.rstrip() + "\n\n" + refs
+
         bibtex = exporters.to_bibtex(kept_candidates)
         citations_json = exporters.to_citations_json(kept_candidates, st.verdicts)
         rejection_md = exporters.rejection_log_markdown(st.rejections)
