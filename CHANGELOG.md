@@ -92,6 +92,19 @@ and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2
   continue to arrive via Semantic Scholar and OpenAlex.
 - **Run view shows the full research question** instead of truncating it to 70 characters.
 
+### Fixed
+- **No fabricated review when there are no sources** — if a run finds no candidates
+  (or none survive screening, or no verifiable content can be extracted), the pipeline
+  now stops before the Synthesizer and emits a short "Literature review not generated"
+  message explaining no sources were found, instead of having the Synthesizer produce a
+  full paper-formatted review claiming "no findings". The downstream stages are marked
+  *skipped* and the run still completes cleanly. Also avoids spending agent budget on
+  screening/reading/synthesis when there is nothing to analyze. A permanent, zero-cost
+  regression test (`backend/tests/test_no_sources_short_circuit.py`) now guards all three
+  short-circuit paths — it stubs every paid stage and asserts the Synthesizer is never
+  invoked, `st.synth` stays `None`, and the review says "not generated" with no
+  paper-section headers.
+
 ---
 
 ## [0.1.0] - 2026-06-04
