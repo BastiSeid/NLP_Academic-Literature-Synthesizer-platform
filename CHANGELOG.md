@@ -99,7 +99,11 @@ and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2
   message explaining no sources were found, instead of having the Synthesizer produce a
   full paper-formatted review claiming "no findings". The downstream stages are marked
   *skipped* and the run still completes cleanly. Also avoids spending agent budget on
-  screening/reading/synthesis when there is nothing to analyze.
+  screening/reading/synthesis when there is nothing to analyze. A permanent, zero-cost
+  regression test (`backend/tests/test_no_sources_short_circuit.py`) now guards all three
+  short-circuit paths — it stubs every paid stage and asserts the Synthesizer is never
+  invoked, `st.synth` stays `None`, and the review says "not generated" with no
+  paper-section headers.
 
 ---
 
