@@ -58,18 +58,42 @@ class ScreenResult(BaseModel):
     rejections: List[RejectionEntry]
 
 
+# ── Stage 3b: Arbiter (reconciles dual-screener disagreements) ───────────────
+class ArbiterDecision(BaseModel):
+    source_id: str
+    decision: Literal["keep", "reject"]
+    reason: str = ""                            # why the arbiter sided this way
+
+
+class ArbiterOutput(BaseModel):
+    decisions: List[ArbiterDecision]
+
+
 # ── Stage 4: Reader notes ────────────────────────────────────────────────────
 class ReaderNote(BaseModel):
     source_id: str
     claim: str
     evidence: str
     location: str                               # section / page / "abstract"
+    quote: str = ""                             # verbatim sentence the claim rests on
     note_type: Literal["claim", "method", "finding"] = "finding"
 
 
 class ReaderOutput(BaseModel):
     source_id: str
     notes: List[ReaderNote]
+
+
+# ── Stage 4b: Note grounding gate (verifies notes vs the paper's own text) ───
+class NoteVerdict(BaseModel):
+    source_id: str
+    claim: str
+    grounded: bool                              # True → traceable to this paper's text
+    reason: str = ""
+
+
+class NoteVerifyOutput(BaseModel):
+    verdicts: List[NoteVerdict]
 
 
 # ── Stage 5: Synthesizer output ──────────────────────────────────────────────

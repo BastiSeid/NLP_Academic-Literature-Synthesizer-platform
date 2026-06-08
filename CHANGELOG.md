@@ -17,6 +17,17 @@ and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2
 ## [Unreleased]
 
 ### Added
+- **Note-grounding gate (Stage 4)** — every Reader note is now verified against its
+  own paper's full text (reused in-memory from the read — no re-fetch) and dropped if it
+  is not traceable to the source, guarding against hallucinated/embellished notes before
+  they can be synthesized or cited. Notes now carry a verbatim `quote`; dropped notes and
+  grounded/dropped counts are persisted (`dropped_notes`, `notes_grounded`/`notes_dropped`).
+  The existing Stage 6 citation Verifier is kept (defense in depth).
+- **Dual-screen arbiter (Stage 3)** — when the two screeners disagree on a candidate, a
+  new Arbiter agent adjudicates only the disputed papers and makes the final keep/reject
+  call (resolutions logged with an `ARBITER_REJECT` reason code). The fast path skips the
+  arbiter entirely when the screeners agree. A new inter-screener `screen_agreement` signal
+  (agree/disagree, arbiter keep/reject) is persisted for evaluation/discussion.
 - **Expandable per-agent stage summaries** — each row in the pipeline view now
   expands (click to toggle, animated chevron) to reveal a human-readable summary
   of what that agent produced: the Scout's sub-questions and search terms, the
@@ -39,6 +50,11 @@ and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2
   auto-spending.
 
 ### Changed
+- **Screening now runs two independent screeners** with opposing dispositions — strict
+  (precision-oriented, rejects when in doubt) and lenient (recall-oriented, keeps when in
+  doubt) — each deciding keep/reject for *every* candidate, reconciled before the `max_kept`
+  budget is applied. This replaces the single budgeted Gatekeeper and specifically targets
+  the highest-impact screening error: a strong paper silently rejected.
 - **More resilient source rate-limit handling** — the shared read-only HTTP helper now
   honors a server's `Retry-After` header on `429`/`503` and otherwise uses jittered
   exponential backoff, with a per-sleep cap so a hard rate-limit never stalls a request.
