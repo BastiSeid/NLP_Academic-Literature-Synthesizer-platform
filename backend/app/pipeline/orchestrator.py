@@ -150,13 +150,33 @@ class RunManager:
                 st.status = "searching"; self._save(ctx)
                 stages.stage_search(ctx, self._save)
 
+            # No sources → don't run the Synthesizer (it would fabricate a full
+            # paper-formatted "no findings" review). Stop early with a plain message.
+            if not st.candidates:
+                self._finalize_no_sources(ctx, "No sources were found for this query.")
+                st.status = "done"; self._save(ctx)
+                return
+
             if not _stage_done(st, "screen"):
                 st.status = "screening"; self._save(ctx)
                 stages.stage_screen(ctx, self._save)
 
+            if not st.kept_ids:
+                self._finalize_no_sources(
+                    ctx, "Sources were found, but none passed screening.")
+                st.status = "done"; self._save(ctx)
+                return
+
             if not _stage_done(st, "extract"):
                 st.status = "extracting"; self._save(ctx)
                 stages.stage_extract(ctx, self._save)
+
+            if not st.notes:
+                self._finalize_no_sources(
+                    ctx, "Sources were screened in, but no verifiable content "
+                         "could be extracted from them.")
+                st.status = "done"; self._save(ctx)
+                return
 
             if not _stage_done(st, "synthesize"):
                 st.status = "synthesizing"; self._save(ctx)
@@ -194,6 +214,39 @@ class RunManager:
             )
             stages.stage_synthesize(ctx, self._save, feedback=feedback)
         st.stage("verify").status = "done"
+        self._save(ctx)
+
+    def _finalize_no_sources(self, ctx: RunContext, reason: str) -> None:
+        """Terminal path when there is nothing to synthesize. Emits a short plain
+        message instead of a fabricated review, and skips the unrun stages. Leaves
+        st.synth as None so the citation invariants (A1/A3) have nothing to trip on."""
+        st = ctx.state
+        for name in ("screen", "extract", "synthesize", "verify"):
+            if st.stage(name).status != "done":
+                st.stage(name).status = "skipped"
+
+        message = (
+            "# Literature review not generated\n\n"
+            f"{reason}\n\n"
+            "A synthesis could not be produced because there were no sources to "
+            "analyze. Try broadening the query, widening the date range, or enabling "
+            "additional sources, then run again.\n"
+        )
+        st.outputs.review_markdown = message
+        st.outputs.mermaid = ""
+        st.outputs.bibtex = ""
+        st.outputs.citations_json = "[]"
+        st.outputs.rejection_log = st.rejections
+
+        export_dir = st.params.export_dir or config.EXPORT_DIR
+        rejection_md = exporters.rejection_log_markdown(st.rejections)
+        try:
+            st.outputs.export_paths = exporters.write_exports(
+                export_dir, st.id, review_md=message, mermaid="",
+                bibtex="", citations_json="[]", rejection_md=rejection_md,
+            )
+        except Exception:
+            st.outputs.export_paths = []
         self._save(ctx)
 
     def _finalize(self, ctx: RunContext) -> None:
