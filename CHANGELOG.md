@@ -23,7 +23,10 @@ and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2
   for missing years). Each entry in `citations.json` also gains an `apa` field with
   the formatted reference string. Inline `[source_id]` markers are left intact and the
   References block is appended only at export — *after* citation verification — so the
-  marker-keyed verifier is unaffected. `citations.bib` remains valid BibTeX.
+  marker-keyed verifier is unaffected. `citations.bib` remains valid BibTeX. Each source
+  appears in the list exactly once: entries are collapsed by a union of DOI and normalized
+  title, so the same paper kept under two source_ids (a DOI-bearing copy and a title-only
+  copy that candidate-dedupe couldn't merge) no longer produces duplicate references.
 - **Crossref source** — added `app/sources/crossref.py`, the DOI backbone (~150M
   works across every discipline) as a fifth scout source, wired into the default
   `source_set` and the search stage. JATS abstracts are stripped to plain text and

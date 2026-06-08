@@ -91,11 +91,57 @@ def apa_reference(c: Candidate) -> str:
     return f"{head}{body}{venue}{link}".strip().rstrip(".") + ("" if link else ".")
 
 
+def _ref_keys(c: Candidate) -> set[str]:
+    """The set of identity keys a paper can be matched on. DOI and normalized
+    title are BOTH emitted when present, because the same paper can survive
+    candidate-dedupe as two source_ids — a DOI-bearing copy and a title-only copy
+    (sources/dedupe.py keys by DOI-or-title, so those keys never meet). Matching
+    on either key lets the reference list still collapse them into one entry."""
+    keys: set[str] = set()
+    ident = (c.identifier or "").lower().replace("https://doi.org/", "").strip()
+    if ident.startswith("10."):
+        keys.add(f"doi:{ident}")
+    norm = re.sub(r"[^a-z0-9]", "", (c.title or "").lower())
+    if norm:
+        keys.add(f"title:{norm}")
+    if not keys:
+        keys.add(f"sid:{c.source_id}")
+    return keys
+
+
+def _richer(a: Candidate, b: Candidate) -> Candidate:
+    """The copy that renders the more complete APA entry: prefer DOI-bearing,
+    then more authors."""
+    rank = lambda c: (c.identifier.startswith("10."), len(c.authors))
+    return b if rank(b) > rank(a) else a
+
+
+def _dedupe_for_references(kept: List[Candidate]) -> List[Candidate]:
+    """One Candidate per real paper. Papers are grouped by a UNION of their
+    identity keys (DOI or normalized title), so a DOI-keyed copy and a title-keyed
+    copy of the same paper merge; the richer copy represents the group."""
+    groups: list[dict] = []
+    for c in kept:
+        keys = _ref_keys(c)
+        matched = [g for g in groups if g["keys"] & keys]
+        if not matched:
+            groups.append({"keys": set(keys), "best": c})
+            continue
+        head = matched[0]
+        for other in matched[1:]:          # candidate bridges two groups → merge them
+            head["keys"] |= other["keys"]
+            head["best"] = _richer(head["best"], other["best"])
+            groups.remove(other)
+        head["keys"] |= keys
+        head["best"] = _richer(head["best"], c)
+    return [g["best"] for g in groups]
+
+
 def apa_references_section(kept: List[Candidate]) -> str:
-    """The '## References' block, entries sorted alphabetically (APA)."""
+    """The '## References' block: each source once, sorted alphabetically (APA)."""
     if not kept:
         return ""
-    entries = sorted(kept, key=_apa_surname_key)
+    entries = sorted(_dedupe_for_references(kept), key=_apa_surname_key)
     lines = ["## References", ""]
     lines += [f"- {apa_reference(c)}" for c in entries]
     return "\n".join(lines) + "\n"
