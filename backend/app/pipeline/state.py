@@ -33,6 +33,17 @@ class Counts(BaseModel):
     rejected: int = 0
     verified: int = 0
     unsupported: int = 0
+    notes_grounded: int = 0          # Stage 4 notes that passed the grounding gate
+    notes_dropped: int = 0           # Stage 4 notes dropped as ungrounded
+
+
+class ScreenAgreement(BaseModel):
+    """Inter-screener agreement signal from the dual-screening stage (Stage 3)."""
+    agree_keep: int = 0              # both screeners kept
+    agree_reject: int = 0            # both screeners rejected
+    disagree: int = 0               # screeners differed → sent to the arbiter
+    arbiter_keep: int = 0            # arbiter resolved a dispute as keep
+    arbiter_reject: int = 0         # arbiter resolved a dispute as reject
 
 
 class Outputs(BaseModel):
@@ -64,7 +75,9 @@ class RunState(BaseModel):
     candidates: List[Candidate] = Field(default_factory=list)
     kept_ids: List[str] = Field(default_factory=list)
     rejections: List[RejectionEntry] = Field(default_factory=list)
+    screen_agreement: ScreenAgreement = Field(default_factory=ScreenAgreement)
     notes: Dict[str, List[ReaderNote]] = Field(default_factory=dict)
+    dropped_notes: Dict[str, List[ReaderNote]] = Field(default_factory=dict)
     synth: Optional[SynthOutput] = None
     verdicts: List[CitationVerdict] = Field(default_factory=list)
     verify_rounds: int = 0
