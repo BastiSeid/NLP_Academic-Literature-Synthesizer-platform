@@ -1,76 +1,61 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import { api, RunState, ACTIVE_STATUSES } from "./api";
+import { useEffect, useState } from "react";
+import { Routes, Route, Navigate, NavLink, Outlet, useLocation } from "react-router-dom";
+import { api } from "./api";
 import NewRun from "./components/NewRun";
-import Progress from "./components/Progress";
-import ApprovalGate from "./components/ApprovalGate";
-import Results from "./components/Results";
 import RunsHistory from "./components/RunsHistory";
+import RunView from "./RunView";
 
-type View = "new" | "run" | "history";
+const LAST_RUN_KEY = "litsynth:lastRun";
+export const rememberRun = (id: string) => { try { localStorage.setItem(LAST_RUN_KEY, id); } catch {} };
 
-export default function App() {
-  const [view, setView] = useState<View>("new");
-  const [runId, setRunId] = useState<string | null>(null);
-  const [run, setRun] = useState<RunState | null>(null);
-  const [model, setModel] = useState<string>("");
-  const [pollNonce, setPollNonce] = useState(0);
-  const timer = useRef<number | null>(null);
+function AppLayout() {
+  const [model, setModel] = useState("");
+  const [healthy, setHealthy] = useState(false);
+  const [lastRun, setLastRun] = useState<string | null>(null);
+  const location = useLocation();
 
-  useEffect(() => { api.health().then((h) => setModel(h.model)).catch(() => {}); }, []);
+  useEffect(() => { api.health().then((h) => { setModel(h.model); setHealthy(!!h.ok); }).catch(() => {}); }, []);
 
-  const refresh = useCallback(async (id: string) => {
-    try {
-      const r = await api.getRun(id);
-      setRun(r);
-      return r;
-    } catch { return null; }
-  }, []);
-
-  // Poll while the run is active.
+  // Re-read the last-opened run on every navigation so the "Current Run" link stays fresh.
   useEffect(() => {
-    if (!runId || view !== "run") return;
-    let stop = false;
-    const tick = async () => {
-      const r = await refresh(runId);
-      if (stop) return;
-      if (r && ACTIVE_STATUSES.has(r.status)) {
-        timer.current = window.setTimeout(tick, 1500);
-      }
-    };
-    tick();
-    return () => { stop = true; if (timer.current) window.clearTimeout(timer.current); };
-  }, [runId, view, refresh, pollNonce]);
-
-  const openRun = (id: string) => { setRunId(id); setRun(null); setView("run"); };
+    try { setLastRun(localStorage.getItem(LAST_RUN_KEY)); } catch {}
+  }, [location.pathname]);
 
   return (
-    <div className="app">
-      <div className="topbar">
-        <h1>📚 Academic Literature Synthesizer</h1>
-        <span className="tag">five-stage multi-agent pipeline {model && `· ${model}`}</span>
-      </div>
-      <div className="nav">
-        <button className={view === "new" ? "active" : ""} onClick={() => setView("new")}>＋ New Run</button>
-        <button className={view === "history" ? "active" : ""} onClick={() => setView("history")}>🕘 Runs History</button>
-        {runId && <button className={view === "run" ? "active" : ""} onClick={() => setView("run")}>▸ Current Run</button>}
-      </div>
+    <>
+      <header className="appbar">
+        <div className="appbar-inner">
+          <NavLink to="/" className="brand" style={{ textDecoration: "none", color: "inherit" }}>
+            <span className="logo">📚</span>
+            <span className="title">Literature Synthesizer</span>
+          </NavLink>
+          <nav className="appnav">
+            <NavLink to="/" end>＋ New Run</NavLink>
+            <NavLink to="/history">🕘 History</NavLink>
+            {lastRun && <NavLink to={`/runs/${lastRun}`}>▸ Current Run</NavLink>}
+          </nav>
+          <div className="appbar-meta">
+            {model && <span className="model-badge">{model}</span>}
+            <span className={"health-dot" + (healthy ? " ok" : "")} title={healthy ? "API connected" : "API offline"} />
+          </div>
+        </div>
+      </header>
+      <main className="app">
+        <Outlet />
+      </main>
+    </>
+  );
+}
 
-      {view === "new" && <NewRun onStarted={openRun} />}
-      {view === "history" && <RunsHistory onOpen={openRun} />}
-      {view === "run" && run && (
-        <>
-          <Progress run={run}
-            onCancel={async () => { await api.cancel(run.id); refresh(run.id); }}
-            onResume={async () => { const r = await api.resume(run.id); setRun(r); setPollNonce((n) => n + 1); }} />
-          {run.status === "awaiting_approval" && (
-            <ApprovalGate run={run} onChanged={() => refresh(run.id)} />
-          )}
-          {["done", "failed", "cancelled", "interrupted"].includes(run.status) && (
-            <Results run={run} />
-          )}
-        </>
-      )}
-      {view === "run" && !run && <div className="card">Loading run…</div>}
-    </div>
+export default function App() {
+  return (
+    <Routes>
+      <Route element={<AppLayout />}>
+        <Route path="/" element={<NewRun />} />
+        <Route path="/history" element={<RunsHistory />} />
+        <Route path="/runs/:id" element={<RunView />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Route>
+    </Routes>
   );
 }
