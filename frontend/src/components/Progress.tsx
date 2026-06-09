@@ -99,6 +99,27 @@ function StageSummary({ name, run }: { name: string; run: RunState }) {
   return <p className="muted">No summary available.</p>;
 }
 
+// Short stepper labels (the longer "1 · Scope & expand" forms live in STAGE_LABELS).
+const STEP_SHORT: Record<string, string> = {
+  scope: "Scope", search: "Search", screen: "Screen", extract: "Read", synthesize: "Synthesize",
+};
+const STEP_ICON: Record<string, string> = { done: "✓", running: "◌", failed: "✕", skipped: "⤼" };
+
+const PHASES = ["New", "Approval", "Running", "Results"];
+function phaseIndex(status: string): number {
+  if (status === "awaiting_approval") return 1;
+  if (["done", "failed", "cancelled", "interrupted"].includes(status)) return 3;
+  if (["created", "scoping"].includes(status)) return 0;
+  return 2; // searching, screening, extracting, synthesizing, assembling
+}
+function bannerTone(status: string): { tone: string; text: string } {
+  if (status === "awaiting_approval") return { tone: "warn", text: "Action required — review the plan below before the expensive phases run." };
+  if (status === "done") return { tone: "success", text: "Pipeline complete — your literature review and deliverables are ready below." };
+  if (["failed", "interrupted"].includes(status)) return { tone: "error", text: "Pipeline stopped before finishing. You can resume from where it left off." };
+  if (status === "cancelled") return { tone: "error", text: "Run cancelled." };
+  return { tone: "info", text: "Pipeline running — stages update live every couple of seconds." };
+}
+
 export default function Progress({ run, onCancel, onResume }: { run: RunState; onCancel: () => void; onResume: () => void }) {
   const [open, setOpen] = useState<Set<string>>(new Set());
   const toggle = (n: string) =>
@@ -114,15 +135,42 @@ export default function Progress({ run, onCancel, onResume }: { run: RunState; o
   const activeLabel = running
     ? (STAGE_LABELS[running.name] || running.name)
     : run.status.replace("_", " ");
+  const phase = phaseIndex(run.status);
+  const banner = bannerTone(run.status);
+
   return (
     <div className="card">
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <h2 style={{ margin: 0 }}>Pipeline</h2>
+      <div className="card-head">
+        <h2>Pipeline</h2>
         <span className={"badge " + run.status}>{run.status.replace("_", " ")}</span>
       </div>
+
+      <div className="phasestrip" aria-label="Journey">
+        {PHASES.map((p, i) => (
+          <span key={p} style={{ display: "contents" }}>
+            {i > 0 && <span className="sep">›</span>}
+            <span className={"ph" + (i === phase ? " active" : i < phase ? " done" : "")}>{p}</span>
+          </span>
+        ))}
+      </div>
+
+      <div className={"status-banner " + banner.tone} role="status" aria-live="polite">{banner.text}</div>
+
       <p className="runquery">{run.query}</p>
 
-      <div className="progressbar" role="progressbar"
+      <div className="stepper" aria-hidden="true">
+        {run.stages.map((s) => (
+          <div key={s.name} className={"step " + s.status}>
+            <div className="bar" />
+            <div className="step-label">
+              <span className="step-ico">{STEP_ICON[s.status] || ""}</span>
+              {STEP_SHORT[s.name] || s.name}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className="progressbar" role="progressbar" aria-label="pipeline progress"
         aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100}>
         <div className={"fill" + (active ? " active" : "")} style={{ width: pct + "%" }} />
       </div>
@@ -130,19 +178,18 @@ export default function Progress({ run, onCancel, onResume }: { run: RunState; o
 
       <div className="metrics">
         <div className="metric"><div className="v">{c.candidates}</div><div className="l">candidates</div></div>
-        <div className="metric"><div className="v" style={{ color: "var(--green)" }}>{c.kept}</div><div className="l">kept</div></div>
-        <div className="metric"><div className="v" style={{ color: "var(--amber)" }}>{c.rejected}</div><div className="l">rejected</div></div>
-        <div className="metric"><div className="v">{c.notes_grounded}/{c.notes_grounded + c.notes_dropped}</div><div className="l">notes grounded</div></div>
-        <div className="metric"><div className="v">${run.cost_usd.toFixed(2)}</div><div className="l">cost</div></div>
-        <div className="metric"><div className="v">{((run.tokens_in + run.tokens_out) / 1000).toFixed(0)}k</div><div className="l">tokens</div></div>
+        <div className="metric"><div className="v" style={{ color: "var(--success)" }}>{c.kept}</div><div className="l">kept</div></div>
+        <div className="metric"><div className="v" style={{ color: "var(--warn)" }}>{c.rejected}</div><div className="l">rejected</div></div>
+        <div className="metric"><div className="v">{c.notes_grounded ?? 0}/{(c.notes_grounded ?? 0) + (c.notes_dropped ?? 0)}</div><div className="l">notes grounded</div></div>
       </div>
 
       <div className="stages">
         {run.stages.map((s) => {
           const expanded = open.has(s.name);
+          const bodyId = `stage-body-${s.name}`;
           return (
             <div key={s.name} className={"stage " + s.status}>
-              <button className="stage-head" aria-expanded={expanded}
+              <button className="stage-head" aria-expanded={expanded} aria-controls={bodyId}
                 onClick={() => toggle(s.name)}>
                 <span className="dot" />
                 <span className="name">{STAGE_LABELS[s.name] || s.name}</span>
@@ -151,7 +198,7 @@ export default function Progress({ run, onCancel, onResume }: { run: RunState; o
                 <span className={"chevron" + (expanded ? " open" : "")}>▸</span>
               </button>
               {expanded && (
-                <div className="stage-body">
+                <div className="stage-body" id={bodyId}>
                   <StageSummary name={s.name} run={run} />
                 </div>
               )}
@@ -162,17 +209,17 @@ export default function Progress({ run, onCancel, onResume }: { run: RunState; o
 
       {run.error && <div className="error" style={{ marginTop: 12 }}>⚠ {run.error}</div>}
 
-      {active && (
-        <div style={{ marginTop: 14 }}>
-          <button className="danger" onClick={onCancel}>■ Cancel run (kill switch)</button>
-        </div>
-      )}
-      {(run.status === "failed" || run.status === "interrupted") && (
-        <div style={{ marginTop: 14 }}>
-          <button className="primary" onClick={onResume}>↻ Resume from where it stopped</button>
-          <span className="muted" style={{ marginLeft: 10 }}>
-            re-runs the failed stage onward; completed stages and cost are kept
-          </span>
+      {(active || run.status === "failed" || run.status === "interrupted") && (
+        <div className="card-actions">
+          {active && (
+            <button className="danger" onClick={onCancel}>■ Cancel run (kill switch)</button>
+          )}
+          {(run.status === "failed" || run.status === "interrupted") && (
+            <>
+              <button className="primary" onClick={onResume}>↻ Resume from where it stopped</button>
+              <span className="muted">re-runs the failed stage onward; completed stages are kept</span>
+            </>
+          )}
         </div>
       )}
     </div>
