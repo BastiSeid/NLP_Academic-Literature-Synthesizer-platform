@@ -11,12 +11,14 @@ export default function ApprovalGate({ run, onChanged }: { run: RunState; onChan
 
   if (!plan) return null;
 
-  const editList = (list: string[], setList: (v: string[]) => void) => (
+  const editList = (list: string[], setList: (v: string[]) => void, label: string) => (
     <div className="list-edit">
       {list.map((v, i) => (
         <div className="li" key={i}>
-          <input value={v} onChange={(e) => { const n = [...list]; n[i] = e.target.value; setList(n); }} />
-          <button onClick={() => setList(list.filter((_, j) => j !== i))}>✕</button>
+          <input value={v} aria-label={`${label} ${i + 1}`}
+            onChange={(e) => { const n = [...list]; n[i] = e.target.value; setList(n); }} />
+          <button className="btn-icon danger" aria-label={`Remove ${label} ${i + 1}`}
+            onClick={() => setList(list.filter((_, j) => j !== i))}>✕</button>
         </div>
       ))}
       <button onClick={() => setList([...list, ""])}>＋ add</button>
@@ -36,32 +38,58 @@ export default function ApprovalGate({ run, onChanged }: { run: RunState; onChan
   };
 
   return (
-    <div className="card" style={{ borderColor: "var(--amber)" }}>
-      <h2>⏸ Approval gate — review the plan before the expensive phases run</h2>
-      <p className="muted">{plan.rationale}</p>
+    <div className="card gate" style={{ borderLeft: "3px solid var(--warn)" }}>
+      <div className="card-head">
+        <h2>⏸ Approval gate</h2>
+        <span className="pill warn">Action required</span>
+      </div>
+      <p className="muted" style={{ marginTop: 0 }}>{plan.rationale}</p>
 
       {!editing ? (
         <>
-          <h3>Sub-questions</h3>
-          <ul>{(run.scope_plan?.sub_questions || []).map((q, i) => <li key={i}>{q}</li>)}</ul>
-          <h3>Search terms</h3>
-          <div className="toggle-group">{(run.scope_plan?.search_terms || []).map((t, i) => <span className="chip on" key={i}>{t}</span>)}</div>
-          <h3 style={{ marginTop: 16 }}>Sources to query</h3>
-          <div className="toggle-group">{(run.plan_source_set?.length ? run.plan_source_set : run.params.source_set).map((s) => <span className="chip on" key={s}>{s}</span>)}</div>
+          <fieldset>
+            <legend>Sub-questions</legend>
+            <ul style={{ margin: 0 }}>{(run.scope_plan?.sub_questions || []).map((q, i) => <li key={i}>{q}</li>)}</ul>
+          </fieldset>
+          <fieldset>
+            <legend>Search terms</legend>
+            <div className="toggle-group">{(run.scope_plan?.search_terms || []).map((t, i) => <span className="chip static on" key={i}>{t}</span>)}</div>
+          </fieldset>
+          <fieldset>
+            <legend>Sources to query</legend>
+            <div className="toggle-group">{(run.plan_source_set?.length ? run.plan_source_set : run.params.source_set).map((s) => <span className="chip static on" key={s}>{s}</span>)}</div>
+          </fieldset>
 
-          <div className="row" style={{ marginTop: 20 }}>
-            <button className="primary" onClick={approve} disabled={busy}>✓ Approve & run search</button>
+          <div className="card-actions">
+            <button className="primary btn-full-mobile" onClick={approve} disabled={busy}>
+              {busy ? <><span className="spinner" /> Approving…</> : "✓ Approve & run search"}
+            </button>
             <button onClick={() => setEditing(true)} disabled={busy}>✎ Revise plan</button>
           </div>
         </>
       ) : (
         <>
-          <h3>Sub-questions</h3>{editList(subs, setSubs)}
-          <h3 style={{ marginTop: 16 }}>Search terms</h3>{editList(terms, setTerms)}
-          <h3 style={{ marginTop: 16 }}>Sources</h3>
-          <div className="toggle-group">{SOURCES.map((s) => <span key={s} className={"chip " + (sources.includes(s) ? "on" : "")} onClick={() => toggle(s)}>{s}</span>)}</div>
-          <div className="row" style={{ marginTop: 20 }}>
-            <button className="primary" onClick={saveRevision} disabled={busy}>Save revision</button>
+          <fieldset>
+            <legend>Sub-questions</legend>
+            {editList(subs, setSubs, "Sub-question")}
+          </fieldset>
+          <fieldset>
+            <legend>Search terms</legend>
+            {editList(terms, setTerms, "Search term")}
+          </fieldset>
+          <fieldset>
+            <legend>Sources</legend>
+            <div className="toggle-group" role="group" aria-label="Sources to query">
+              {SOURCES.map((s) => (
+                <button key={s} type="button" className={"chip " + (sources.includes(s) ? "on" : "")}
+                  aria-pressed={sources.includes(s)} onClick={() => toggle(s)}>{s}</button>
+              ))}
+            </div>
+          </fieldset>
+          <div className="card-actions">
+            <button className="primary btn-full-mobile" onClick={saveRevision} disabled={busy}>
+              {busy ? <><span className="spinner" /> Saving…</> : "Save revision"}
+            </button>
             <button onClick={() => setEditing(false)} disabled={busy}>Cancel</button>
           </div>
         </>

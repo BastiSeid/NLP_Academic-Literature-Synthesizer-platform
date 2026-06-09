@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { api, RunParams, SOURCES } from "../api";
 
 const MODEL_LABELS: Record<string, string> = {
@@ -7,7 +8,8 @@ const MODEL_LABELS: Record<string, string> = {
   "claude-haiku-4-5-20251001": "Haiku 4.5 — fastest, cheapest",
 };
 
-export default function NewRun({ onStarted }: { onStarted: (id: string) => void }) {
+export default function NewRun() {
+  const navigate = useNavigate();
   const [query, setQuery] = useState("");
   const [model, setModel] = useState("");
   const [models, setModels] = useState<string[]>([]);
@@ -43,23 +45,23 @@ export default function NewRun({ onStarted }: { onStarted: (id: string) => void 
     };
     try {
       const run = await api.createRun(query.trim(), params);
-      onStarted(run.id);
-    } catch (e: any) { setErr(String(e.message || e)); }
-    finally { setBusy(false); }
+      navigate(`/runs/${run.id}`);
+    } catch (e: any) { setErr(String(e.message || e)); setBusy(false); }
   };
 
   return (
-    <div className="card">
+    <div className="card form-narrow">
       <h2>New literature review</h2>
       <div className="field">
-        <label>Research query (broad is good — the pipeline will scope it)</label>
-        <textarea rows={3} value={query} onChange={(e) => setQuery(e.target.value)}
+        <label htmlFor="nr-query">Research query (broad is good — the pipeline will scope it)</label>
+        <textarea id="nr-query" rows={3} value={query} onChange={(e) => setQuery(e.target.value)}
+          aria-describedby="nr-query-help"
           placeholder="e.g. What are the latest advancements in multi-agent LLM systems?" />
       </div>
 
       <div className="field">
-        <label>Model (blank = server default)</label>
-        <select value={model} onChange={(e) => setModel(e.target.value)}>
+        <label htmlFor="nr-model">Model (blank = server default)</label>
+        <select id="nr-model" value={model} onChange={(e) => setModel(e.target.value)}>
           <option value="">Server default</option>
           {models.map((m) => (
             <option key={m} value={m}>{MODEL_LABELS[m] || m}</option>
@@ -69,49 +71,49 @@ export default function NewRun({ onStarted }: { onStarted: (id: string) => void 
 
       <details>
         <summary>Advanced parameters</summary>
-        <div className="row">
-          <div className="field grow">
-            <label>Date range (e.g. 2018-2026)</label>
-            <input value={dateRange} onChange={(e) => setDateRange(e.target.value)} placeholder="optional" />
+        <div className="param-grid">
+          <div className="field">
+            <label htmlFor="nr-date">Date range (e.g. 2018-2026)</label>
+            <input id="nr-date" value={dateRange} onChange={(e) => setDateRange(e.target.value)} placeholder="optional" />
           </div>
           <div className="field">
-            <label>Max candidates</label>
-            <input type="number" value={maxCandidates} min={5} max={200}
+            <label htmlFor="nr-maxc">Max candidates</label>
+            <input id="nr-maxc" type="number" inputMode="numeric" value={maxCandidates} min={5} max={200}
               onChange={(e) => setMaxCandidates(Number(e.target.value))} />
           </div>
           <div className="field">
-            <label>Max kept</label>
-            <input type="number" value={maxKept} min={1} max={60}
+            <label htmlFor="nr-maxk">Max kept</label>
+            <input id="nr-maxk" type="number" inputMode="numeric" value={maxKept} min={1} max={60}
               onChange={(e) => setMaxKept(Number(e.target.value))} />
           </div>
           <div className="field">
-            <label>Cost cap (USD)</label>
-            <input type="number" value={costCap} placeholder="default"
+            <label htmlFor="nr-cost">Cost cap (USD)</label>
+            <input id="nr-cost" type="number" inputMode="decimal" value={costCap} placeholder="default"
               onChange={(e) => setCostCap(e.target.value)} />
           </div>
         </div>
         <div className="field">
-          <label>Export directory (server-side; blank = default)</label>
-          <input value={exportDir} onChange={(e) => setExportDir(e.target.value)} placeholder="optional" />
+          <label htmlFor="nr-export">Export directory (server-side; blank = default)</label>
+          <input id="nr-export" value={exportDir} onChange={(e) => setExportDir(e.target.value)} placeholder="optional" />
         </div>
         <div className="field">
           <label>Source set</label>
-          <div className="toggle-group">
+          <div className="toggle-group" role="group" aria-label="Sources to query">
             {SOURCES.map((s) => (
-              <span key={s} className={"chip " + (sources.includes(s) ? "on" : "")}
-                onClick={() => toggle(s)}>{s}</span>
+              <button key={s} type="button" className={"chip " + (sources.includes(s) ? "on" : "")}
+                aria-pressed={sources.includes(s)} onClick={() => toggle(s)}>{s}</button>
             ))}
           </div>
         </div>
       </details>
 
       {err && <div className="error" style={{ marginBottom: 12 }}>{err}</div>}
-      <button className="primary" onClick={start} disabled={busy}>
-        {busy ? "Starting…" : "Start pipeline →"}
+      <button className="primary btn-full-mobile" onClick={start} disabled={busy}>
+        {busy ? <><span className="spinner" /> Starting…</> : "Start pipeline →"}
       </button>
-      <p className="muted" style={{ marginTop: 10 }}>
+      <p id="nr-query-help" className="callout info" style={{ marginTop: 14 }}>
         The pipeline will <strong>pause at an approval gate</strong> after scoping, before the
-        expensive search/read/synthesis phases.
+        expensive search / read / synthesis phases run.
       </p>
     </div>
   );

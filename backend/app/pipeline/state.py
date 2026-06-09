@@ -3,7 +3,7 @@ to SQLite after every stage so progress and results survive a page reload."""
 from __future__ import annotations
 
 from typing import Dict, List, Optional, Literal
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from ..schemas import (
     RunParams, Candidate, ScopePlan, RejectionEntry, ReaderNote,
@@ -33,6 +33,20 @@ class Counts(BaseModel):
     rejected: int = 0
     notes_grounded: int = 0          # Stage 4 notes that passed the grounding gate
     notes_dropped: int = 0           # Stage 4 notes dropped as ungrounded
+
+    @model_validator(mode="before")
+    @classmethod
+    def _normalize_legacy_counts(cls, data):
+        """Read-time compat shim: older persisted runs stored the grounding tally
+        under `verified`/`unsupported`. Map them onto the current field names when
+        the new fields are absent, so legacy runs still surface the metric. No-ops
+        for current runs and never mutates the stored JSON."""
+        if isinstance(data, dict):
+            if "notes_grounded" not in data and "verified" in data:
+                data = {**data, "notes_grounded": data["verified"]}
+            if "notes_dropped" not in data and "unsupported" in data:
+                data = {**data, "notes_dropped": data["unsupported"]}
+        return data
 
 
 class ScreenAgreement(BaseModel):
