@@ -5,6 +5,7 @@ from typing import List
 from ..schemas import Candidate
 from ..config import config
 from ._http import get
+from ._merge import by_term
 
 API = "https://api.openalex.org/works"
 
@@ -20,18 +21,14 @@ def _reconstruct_abstract(inv: dict | None) -> str:
     return " ".join(w for _, w in positions)
 
 
-def search(terms: List[str], max_results: int = 25) -> List[Candidate]:
-    query = " ".join(terms[:6]) or "research"
+def _query_one(query: str, max_results: int) -> List[Candidate]:
     params = {"search": query, "per_page": min(max_results, 50)}
     if config.OPENALEX_EMAIL:
         params["mailto"] = config.OPENALEX_EMAIL
-    try:
-        resp = get(API, params=params, timeout=30.0)
-        if resp.status_code != 200:
-            return []
-        results = resp.json().get("results", []) or []
-    except Exception:
+    resp = get(API, params=params, timeout=30.0)
+    if resp.status_code != 200:
         return []
+    results = resp.json().get("results", []) or []
 
     out: List[Candidate] = []
     for w in results:
@@ -52,3 +49,9 @@ def search(terms: List[str], max_results: int = 25) -> List[Candidate]:
             score=w.get("cited_by_count"),
         ))
     return out
+
+
+def search(terms: List[str], max_results: int = 25) -> List[Candidate]:
+    """Query each term separately and union (one long concatenated query matches
+    almost nothing on OpenAlex's relevance search)."""
+    return by_term(_query_one, terms, max_results)

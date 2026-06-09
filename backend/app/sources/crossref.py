@@ -8,6 +8,7 @@ from typing import List
 from ..schemas import Candidate
 from ..config import config
 from ._http import get
+from ._merge import by_term
 
 API = "https://api.crossref.org/works"
 
@@ -27,18 +28,14 @@ def _year(item: dict) -> int | None:
         return None
 
 
-def search(terms: List[str], max_results: int = 25) -> List[Candidate]:
-    query = " ".join(terms[:6]) or "research"
+def _query_one(query: str, max_results: int) -> List[Candidate]:
     params = {"query": query, "rows": min(max_results, 100)}
     if config.OPENALEX_EMAIL:  # reused as a generic contact for the polite pool
         params["mailto"] = config.OPENALEX_EMAIL
-    try:
-        resp = get(API, params=params, timeout=30.0, retries=2, backoff=3.0)
-        if resp.status_code != 200:
-            return []
-        items = (resp.json().get("message") or {}).get("items", []) or []
-    except Exception:
+    resp = get(API, params=params, timeout=30.0, retries=2, backoff=3.0)
+    if resp.status_code != 200:
         return []
+    items = (resp.json().get("message") or {}).get("items", []) or []
 
     out: List[Candidate] = []
     for it in items:
@@ -62,3 +59,8 @@ def search(terms: List[str], max_results: int = 25) -> List[Candidate]:
             score=it.get("is-referenced-by-count"),
         ))
     return out
+
+
+def search(terms: List[str], max_results: int = 25) -> List[Candidate]:
+    """Query each term separately and union the results."""
+    return by_term(_query_one, terms, max_results)

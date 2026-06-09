@@ -5,25 +5,26 @@ from typing import List
 from ..schemas import Candidate
 from ..config import config
 from ._http import get
+from ._merge import by_term
 
 API = "https://api.semanticscholar.org/graph/v1/paper/search"
 FIELDS = "title,authors,year,venue,abstract,externalIds,url,citationCount"
 
 
-def search(terms: List[str], max_results: int = 25) -> List[Candidate]:
-    query = " ".join(terms[:6]) or "research"
+def _query_one(query: str, max_results: int) -> List[Candidate]:
     headers = {}
     if config.SEMANTIC_SCHOLAR_API_KEY:
         headers["x-api-key"] = config.SEMANTIC_SCHOLAR_API_KEY
-    try:
-        resp = get(API, params={"query": query, "limit": min(max_results, 100),
-                                "fields": FIELDS}, headers=headers, timeout=30.0,
-                   retries=2, backoff=3.0)
-        if resp.status_code != 200:
-            return []
-        data = resp.json().get("data", []) or []
-    except Exception:
+    resp = get(API, params={"query": query, "limit": min(max_results, 100),
+                            "fields": FIELDS}, headers=headers, timeout=30.0,
+               retries=2, backoff=3.0)
+    # Surface rate-limiting (the common failure mode without an API key) so the
+    # search stage reports it instead of it looking like "no results".
+    if resp.status_code == 429:
+        raise RuntimeError("Semantic Scholar rate-limited (set SEMANTIC_SCHOLAR_API_KEY)")
+    if resp.status_code != 200:
         return []
+    data = resp.json().get("data", []) or []
 
     out: List[Candidate] = []
     for p in data:
@@ -42,3 +43,8 @@ def search(terms: List[str], max_results: int = 25) -> List[Candidate]:
             score=p.get("citationCount"),
         ))
     return out
+
+
+def search(terms: List[str], max_results: int = 25) -> List[Candidate]:
+    """Query each term separately and union the results."""
+    return by_term(_query_one, terms, max_results)
