@@ -4,6 +4,7 @@ a checkpoint via `save`. Retrieval is deterministic Python; agents reason only."
 from __future__ import annotations
 
 import json
+import logging
 from typing import Callable, List
 
 from ..schemas import (
@@ -14,6 +15,8 @@ from ..agents import prompts
 from ..agent_runner import run_structured
 from ..sources import arxiv, semantic_scholar, openalex, crossref, web, fetch, dedupe
 from ..config import config
+
+log = logging.getLogger(__name__)
 
 Save = Callable[["object"], None]
 
@@ -74,6 +77,15 @@ def stage_search(ctx, save: Save) -> None:
 
     gathered: List[Candidate] = []
     per_source_counts: dict[str, int] = {}
+    per_source_errors: dict[str, str] = {}
+
+    def _label(s: str) -> str:
+        # Show a source's contribution, or its failure — so a zero-result run is
+        # diagnosable instead of silently looking like "no literature exists".
+        if s in per_source_errors:
+            return f"{s}: ⚠ {per_source_errors[s]}"
+        return f"{s}: {per_source_counts.get(s, 0)}"
+
     for src in sources:
         ctx.check()
         fn = _SOURCE_FUNCS.get(src)
@@ -81,14 +93,16 @@ def stage_search(ctx, save: Save) -> None:
             continue
         try:
             results = fn(terms, per_source)
-        except Exception:
+            per_source_counts[src] = len(results)
+        except Exception as e:  # surface, don't swallow — keep other sources going
             results = []
+            per_source_errors[src] = f"{type(e).__name__}: {e}"[:80]
+            log.warning("search source %r failed: %s", src, e)
         gathered.extend(results)
-        per_source_counts[src] = len(results)
-        # Cumulative breakdown so every source's contribution stays visible
-        # (a single overwriting line hid that arxiv/s2/web also found papers).
+        # Cumulative breakdown so every source's contribution (or failure) stays
+        # visible (a single overwriting line hid that arxiv/s2/web also ran).
         st.stage("search").detail = ", ".join(
-            f"{s}: {per_source_counts[s]}" for s in sources if s in per_source_counts
+            _label(s) for s in sources if s in per_source_counts or s in per_source_errors
         )
         save(ctx)
 
@@ -97,7 +111,7 @@ def stage_search(ctx, save: Save) -> None:
     st.candidates = merged
     st.counts.candidates = len(merged)
     st.stage("search").status = "done"
-    breakdown = ", ".join(f"{s}: {per_source_counts.get(s, 0)}" for s in sources)
+    breakdown = ", ".join(_label(s) for s in sources)
     st.stage("search").detail = (
         f"{len(merged)} candidates ({len(gathered)} pre-dedupe) — {breakdown}"
     )

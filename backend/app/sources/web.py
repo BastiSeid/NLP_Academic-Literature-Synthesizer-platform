@@ -18,6 +18,7 @@ from bs4 import BeautifulSoup
 from ..schemas import Candidate
 from ..config import config
 from ._http import get
+from ._merge import by_term
 
 ENDPOINT = "https://html.duckduckgo.com/html/"
 
@@ -199,25 +200,24 @@ def _enrich(cand: Candidate) -> Candidate:
     return cand
 
 
-def search(terms: List[str], max_results: int = 15) -> List[Candidate]:
-    query = " ".join(terms[:6]) or "research"
-    try:
-        resp = get(ENDPOINT, params={"q": query}, timeout=25.0)
-        if resp.status_code != 200:
-            return []
-        soup = BeautifulSoup(resp.text, "html.parser")
-    except Exception:
+def _query_one(query: str, max_results: int) -> List[Candidate]:
+    """One DuckDuckGo SERP fetch + parse (no page enrichment — that runs once,
+    later, on the unioned result set). source_id is keyed on the URL only so the
+    same page found under different terms dedupes correctly."""
+    resp = get(ENDPOINT, params={"q": query}, timeout=25.0)
+    if resp.status_code != 200:
         return []
+    soup = BeautifulSoup(resp.text, "html.parser")
 
     out: List[Candidate] = []
-    for i, res in enumerate(soup.select(".result")[:max_results]):
+    for res in soup.select(".result")[:max_results]:
         a = res.select_one(".result__a")
         if not a:
             continue
         url = _clean_ddg_url(a.get("href", ""))
         snippet_el = res.select_one(".result__snippet")
         out.append(Candidate(
-            source_id=f"web:{i}:{abs(hash(url)) % 10_000_000}",
+            source_id=f"web:{abs(hash(url)) % 10_000_000}",
             title=a.get_text(strip=True),
             authors=[],
             year=None,
@@ -227,6 +227,13 @@ def search(terms: List[str], max_results: int = 15) -> List[Candidate]:
             url=url,
             source="web",
         ))
+    return out
+
+
+def search(terms: List[str], max_results: int = 15) -> List[Candidate]:
+    """Query each term separately and union, then recover authors/year once over
+    the merged set (a single concatenated query returns nothing from DuckDuckGo)."""
+    out = by_term(_query_one, terms, max_results, max_terms=6)
 
     # Recover authors from each result page's metadata, in parallel and bounded
     # by a tight timeout so a slow/blocking page can't stall the search stage.
