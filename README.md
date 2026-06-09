@@ -34,7 +34,7 @@ flowchart TD
     ORCH --> SCOPE["1 - Scope and expand (Scout): broad query into sub-questions and search terms"]
     SCOPE --> GATE{"Approval gate: user reviews plan and source list before the expensive phases run"}
     GATE -- revise --> SCOPE
-    GATE -- approve --> SEARCH["2 - Search and retrieve (Scout): arXiv, Semantic Scholar, OpenAlex, web"]
+    GATE -- approve --> SEARCH["2 - Search and retrieve (Scout): arXiv, Semantic Scholar, OpenAlex, Crossref, web — each search term queried separately"]
     SEARCH --> SCR_S["3 - Screen STRICT (Gatekeeper, precision): reject when in doubt"]
     SEARCH --> SCR_L["3 - Screen LENIENT (Gatekeeper, recall): keep when in doubt"]
     SCR_S --> ARB{"3 - Arbiter: reconcile disagreements (fast-path if both agree)"}
@@ -63,7 +63,7 @@ a single responsibility, and a narrow tool scope. Each agent's output is **schem
 |---|-------|----------------|-----------|----------------------------|
 | 0 | **Orchestrator** | Owns the run end-to-end; routes the five stages; enforces stop conditions, cost cap, and invariants; pauses at the gate; assembles + validates the four deliverables. | None external — pure delegation + assembly (Python). | The four deliverables. |
 | 1 | **Scout (scope)** | Expand the broad query into sub-questions and search terms. | None (reasoning). | `ScopePlan` — sub-questions, terms. |
-| 2 | **Scout (retrieve)** | Maximize recall of relevant/seminal/newest work. | arXiv, Semantic Scholar, OpenAlex, web — **HTTP GET only**. Deterministic Python clients. | `Candidate[]` with full metadata. |
+| 2 | **Scout (retrieve)** | Maximize recall of relevant/seminal/newest work; **each planner term is queried separately** (then unioned + deduped) so non-STEM topics aren't lost to one long bag-of-words search. | arXiv, Semantic Scholar, OpenAlex, Crossref, web — **HTTP GET only**. Deterministic Python clients; web results are enriched with their own page metadata for real authors + year. | `Candidate[]` with full metadata + `merged_from` (every source that found it). |
 | 3a | **Gatekeeper · strict** (precision) | Judge every candidate on relevance + quality, rejecting when in doubt. | None (judgment over metadata/abstracts). | `ScreenResult` (per-candidate keep/reject + reason). |
 | 3b | **Gatekeeper · lenient** (recall) | Judge every candidate independently, keeping when plausibly relevant. | None (judgment over metadata/abstracts). | `ScreenResult` (per-candidate keep/reject + reason). |
 | 3c | **Arbiter** | Reconcile only the candidates the two screeners disagree on; make the final keep/reject call (fast-path skipped on full agreement). `max_kept` applied after. | None (judgment over the two screeners' decisions). | `ArbiterOutput` + `screen_agreement` signal. |
@@ -119,6 +119,23 @@ never reach out, write, or exceed its lane.
   exactly the context it needs; finished stages are summarized to the datastore; the
   Orchestrator never holds raw PDFs. This is both a quality decision (focused context) and a
   security one (blast-radius containment).
+- **Per-term retrieval, so non-STEM topics aren't silently empty.** Earlier, every source
+  collapsed the planner's terms into one ~30-word `" ".join(...)` query and sent it once;
+  relevance engines return near-nothing for such a long bag-of-words unless the field is densely
+  indexed (STEM), so queries like "startup valuation" or "Cold War diplomacy" could come back with
+  **zero** sources from every provider but arXiv. Each term is now run as **its own query** and the
+  hits are unioned + deduped (by `source_id`) under the per-source budget, while arXiv keeps its
+  native OR behavior — turning 0-source runs into dozens of candidates.
+- **Grey-literature author & year recovery — deterministic, no new hallucination surface.** Web /
+  grey-literature hits used to land author-less and date-less (`n.d.`). The web client now does a
+  best-effort, **read-only** scrape of each result page's *own* bibliographic metadata (Highwire
+  `citation_*` tags, JSON-LD, Dublin Core, `<meta name="author">`) to recover real authors and a
+  publication year for the APA references and exports. It is **fully deterministic** — no model
+  infers names — so it adds nothing for the note-grounding gate to catch: "Surname, Given" is
+  flipped, non-person strings (publishers, URLs, "Editorial Staff") are rejected, a title-match
+  guard skips pages that redirected elsewhere, and anything without usable metadata simply keeps
+  `authors=[]`. Tunable via `LITSYNTH_WEB_ENRICH` / `LITSYNTH_WEB_ENRICH_TIMEOUT`; fetches run in
+  parallel and degrade gracefully on failure.
 - **Injection / poisoning guard.** All retrieved paper text and web content is wrapped and
   framed as **untrusted DATA, never instructions** — every agent prompt carries this rule and
   fenced delimiters, so an "ignore previous instructions" buried in a PDF is treated as content
@@ -146,10 +163,10 @@ never reach out, write, or exceed its lane.
 | Backend / orchestration | **Python + FastAPI** | Async HTTP surface + clean place for the deterministic state machine and source clients. |
 | Agent runtime | **`claude` CLI headless** (`claude -p --output-format json`) | Powers agents on your **Claude Max subscription** (no API key), gives each agent an isolated context, and returns token + USD usage for the cost cap. |
 | Agent I/O | **Pydantic v2** | Every subagent output is schema-validated before the next stage runs; one retry on malformed JSON. |
-| Source clients | **httpx + feedparser + BeautifulSoup + pypdf** | Read-only GET clients for arXiv (Atom), Semantic Scholar, OpenAlex, DuckDuckGo HTML, and PDF/HTML text extraction. |
+| Source clients | **httpx + feedparser + BeautifulSoup + pypdf** | Read-only GET clients for arXiv (Atom), Semantic Scholar, OpenAlex, Crossref (DOI backbone), DuckDuckGo HTML, PDF/HTML text extraction, and per-page metadata enrichment of web results. Each planner term is queried separately, then unioned + deduped. |
 | Persistence | **SQLite (stdlib)** | Zero-config, user-controlled; full run state checkpointed as JSON after every stage → survives restart / page reload. |
-| Frontend | **React + TypeScript + Vite** | Fast SPA; polls run state; tabbed results. |
-| Rendering | **marked + DOMPurify + Mermaid.js** | Sanitized markdown; client-side Mermaid with pan/zoom + fullscreen and SVG/PNG/.mmd export. |
+| Frontend | **React + TypeScript + Vite + React Router** | Fast, fully responsive SPA with real URLs — deep-linkable runs (`/runs/:id`) and result tabs (`?tab=`), working back/forward and refresh; polls run state. |
+| Rendering | **marked + DOMPurify + Mermaid.js** | Sanitized markdown (review + APA reference list); client-side Mermaid with pan/zoom + fullscreen and SVG/PNG/.mmd export. |
 | Model | **Opus 4.8** (`LITSYNTH_MODEL`, default `claude-opus-4-8`) | Strongest reasoning for screening, deep reading, and synthesis; set the server default via env, or pick per run from a UI dropdown (Opus 4.8 / Sonnet 4.6 / Haiku 4.5). |
 
 ---
@@ -191,22 +208,24 @@ cd litsynth/frontend && npm install && npm run dev
    default) → (optional) open **Advanced parameters**
    (`date_range`, `max_candidates`, `max_kept`, source toggles, `export_dir`, cost cap) → **Start**.
 2. **Pipeline progress** shows the five stages live behind a determinate **progress bar** (percentage
-   + current-stage caption), with candidate/kept/rejected and notes-grounded counts, per-run cost +
-   token usage, and a **Cancel** button (the kill switch). Each stage row **expands** to a per-agent
+   + current-stage caption), with candidate/kept/rejected and notes-grounded counts and a **Cancel**
+   button (the kill switch). Each stage row **expands** to a per-agent
    summary of what it produced — sub-questions + search terms, per-source candidate counts,
    rejection-reason tallies, reader-note counts (grounded vs dropped), and themes. A
    failed/interrupted run shows a **Resume** button.
 3. At the **approval gate**, review the sub-questions, search terms, and source list →
    **Approve** or **Revise** (edit, then resubmit). Nothing is searched until you act.
-4. **Results** tabs: **Literature Review** (sanitized markdown with working inline citation
-   links to the reference list), **Rejection Log** (sortable table), **Citations**
-   (BibTeX + JSON, copy/download), **Visual Synthesis** (Mermaid with pan/zoom + fullscreen,
-   export SVG/PNG/.mmd). Deliverables are also written to `export_dir/<run_id>/`.
+4. **Results** tabs: **Literature Review** (sanitized markdown ending in an alphabetized **APA 7
+   reference list**, with working inline citation links into it), **Rejection Log** (sortable table),
+   **Citations** (BibTeX + JSON — each JSON entry also carries a formatted `apa` string —
+   copy/download), **Visual Synthesis** (Mermaid with pan/zoom + fullscreen, export SVG/PNG/.mmd).
+   The active tab lives in the URL (`?tab=`) so it survives refresh and is deep-linkable. Deliverables
+   are also written to `export_dir/<run_id>/`.
 
-Run state persists in SQLite, so progress and results survive a page reload, and past
-runs are reopenable from **Runs History**. A run that **failed or was interrupted** can be
-**resumed** from its first not-done stage — completed stages and accumulated cost are kept, and a
-run paused at the approval gate returns to the gate rather than auto-spending.
+Run state persists in SQLite, so progress and results survive a page reload, every run has its own
+URL (`/runs/:id`), and past runs are reopenable from **Runs History**. A run that **failed or was
+interrupted** can be **resumed** from its first not-done stage — completed stages and accumulated
+cost are kept, and a run paused at the approval gate returns to the gate rather than auto-spending.
 
 ---
 
@@ -221,6 +240,8 @@ See [`backend/.env.example`](backend/.env.example). Key knobs:
 | `LITSYNTH_COST_CAP_USD` | `40` | Hard per-run cost ceiling (kill switch). Overridable per run in the UI. |
 | `LITSYNTH_RUN_TIMEOUT` | `3600` | Wall-clock stop condition (s). |
 | `LITSYNTH_MAX_STEPS` | `200` | Max agent calls before forced stop. |
+| `LITSYNTH_WEB_ENRICH` | `1` (on) | Scrape each web result's own page metadata to recover authors + year for grey literature. Set `0` to disable. |
+| `LITSYNTH_WEB_ENRICH_TIMEOUT` | `6` | Per-page timeout (s) for the metadata enrichment fetch; failures degrade gracefully to `authors=[]`. |
 | `LITSYNTH_DB_PATH` / `LITSYNTH_EXPORT_DIR` | `./litsynth.db` / `./exports` | Datastore + default export folder (the only places the platform writes). |
 
 ---
@@ -267,7 +288,7 @@ litsynth/
 │  │  ├─ agent_runner.py        # headless `claude` CLI wrapper (usage + cost)
 │  │  ├─ config.py  schemas.py  db.py  exporters.py
 │  │  ├─ agents/prompts.py      # the subagent system prompts
-│  │  ├─ sources/               # read-only arXiv / S2 / OpenAlex / web / fetch / dedupe
+│  │  ├─ sources/               # read-only arXiv / S2 / OpenAlex / Crossref / web (+ enrich) / fetch / dedupe / _merge (per-term union)
 │  │  ├─ pipeline/              # orchestrator · stages · guards · state
 │  │  └─ evals/                 # cases.json + run_evals.py
 │  └─ requirements.txt  .env.example
