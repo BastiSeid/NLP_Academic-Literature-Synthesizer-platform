@@ -35,7 +35,6 @@ class Config:
     COST_CAP_USD: float = float(os.getenv("LITSYNTH_COST_CAP_USD", "40"))
     RUN_TIMEOUT: int = int(os.getenv("LITSYNTH_RUN_TIMEOUT", "3600"))
     MAX_STEPS: int = int(os.getenv("LITSYNTH_MAX_STEPS", "200"))
-    MAX_VERIFY_ROUNDS: int = int(os.getenv("LITSYNTH_MAX_VERIFY_ROUNDS", "2"))
 
     # Data sources
     OPENALEX_EMAIL: str = os.getenv("LITSYNTH_OPENALEX_EMAIL", "").strip()

@@ -7,16 +7,16 @@ from pydantic import BaseModel, Field
 
 from ..schemas import (
     RunParams, Candidate, ScopePlan, RejectionEntry, ReaderNote,
-    SynthOutput, CitationVerdict,
+    SynthOutput,
 )
 
-# UI pipeline stages (the six from the architecture flow)
-STAGE_NAMES = ["scope", "search", "screen", "extract", "synthesize", "verify"]
+# UI pipeline stages (the five from the architecture flow)
+STAGE_NAMES = ["scope", "search", "screen", "extract", "synthesize"]
 StageState = Literal["pending", "running", "done", "failed", "skipped"]
 
 RunStatus = Literal[
     "created", "scoping", "awaiting_approval", "searching", "screening",
-    "extracting", "synthesizing", "verifying", "assembling",
+    "extracting", "synthesizing", "assembling",
     "done", "failed", "cancelled", "interrupted",
 ]
 
@@ -31,8 +31,6 @@ class Counts(BaseModel):
     candidates: int = 0
     kept: int = 0
     rejected: int = 0
-    verified: int = 0
-    unsupported: int = 0
     notes_grounded: int = 0          # Stage 4 notes that passed the grounding gate
     notes_dropped: int = 0           # Stage 4 notes dropped as ungrounded
 
@@ -79,8 +77,6 @@ class RunState(BaseModel):
     notes: Dict[str, List[ReaderNote]] = Field(default_factory=dict)
     dropped_notes: Dict[str, List[ReaderNote]] = Field(default_factory=dict)
     synth: Optional[SynthOutput] = None
-    verdicts: List[CitationVerdict] = Field(default_factory=list)
-    verify_rounds: int = 0
 
     outputs: Outputs = Field(default_factory=Outputs)
 

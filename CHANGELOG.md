@@ -22,8 +22,8 @@ and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2
   arXiv-preprint, and web variants; author initials, `& `/21+-author rules, `n.d.`
   for missing years). Each entry in `citations.json` also gains an `apa` field with
   the formatted reference string. Inline `[source_id]` markers are left intact and the
-  References block is appended only at export — *after* citation verification — so the
-  marker-keyed verifier is unaffected. `citations.bib` remains valid BibTeX. Each source
+  References block is appended only at assembly, after the review is drafted, so those
+  markers stay intact upstream. `citations.bib` remains valid BibTeX. Each source
   appears in the list exactly once: entries are collapsed by a union of DOI and normalized
   title, so the same paper kept under two source_ids (a DOI-bearing copy and a title-only
   copy that candidate-dedupe couldn't merge) no longer produces duplicate references.
@@ -42,7 +42,8 @@ and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2
   is not traceable to the source, guarding against hallucinated/embellished notes before
   they can be synthesized or cited. Notes now carry a verbatim `quote`; dropped notes and
   grounded/dropped counts are persisted (`dropped_notes`, `notes_grounded`/`notes_dropped`).
-  The existing Stage 6 citation Verifier is kept (defense in depth).
+  This gate is now the pipeline's sole hallucination defense — see **Removed**, where the
+  Stage 6 citation Verifier was retired in favor of grounding claims at extraction.
 - **Dual-screen arbiter (Stage 3)** — when the two screeners disagree on a candidate, a
   new Arbiter agent adjudicates only the disputed papers and makes the final keep/reject
   call (resolutions logged with an `ARBITER_REJECT` reason code). The fast path skips the
@@ -52,11 +53,10 @@ and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2
   expands (click to toggle, animated chevron) to reveal a human-readable summary
   of what that agent produced: the Scout's sub-questions and search terms, the
   Scout's per-source candidate breakdown, the Gatekeeper's kept/rejected counts
-  and rejection-reason tally, the Reader's note counts per source, the
-  Synthesizer's themes / citation count / draft length, and the Verifier's
-  supported-vs-unsupported tally and re-read rounds. All derived client-side from
+  and rejection-reason tally, the Reader's note counts per source, and the
+  Synthesizer's themes / citation count / draft length. All derived client-side from
   existing run state — no backend changes, no added cost. Each row also labels the
-  agent that ran it (Scout / Gatekeeper / Reader / Synthesizer / Verifier).
+  agent that ran it (Scout / Gatekeeper / Reader / Synthesizer).
 - **Per-run model selector** — the New Run screen now offers a model dropdown
   (Opus 4.8 / Sonnet 4.6 / Haiku 4.5; blank = server default). Options are served by the
   backend (`LITSYNTH_AVAILABLE_MODELS`, exposed via `/health`) and the choice is threaded
@@ -104,6 +104,21 @@ and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2
   short-circuit paths — it stubs every paid stage and asserts the Synthesizer is never
   invoked, `st.synth` stays `None`, and the review says "not generated" with no
   paper-section headers.
+
+### Removed
+- **Stage 6 citation Verifier** — the final claim-citation verification stage (and its
+  bounded Verifier→Reader rework loop) has been removed. The note-grounding gate at Stage 4
+  already checks every extracted note against its own paper's text *before* synthesis, so a
+  claim that can't be traced to its source never reaches a citation in the first place;
+  re-verifying citations afterward was redundant. The pipeline is now **five stages**.
+  Dropped along with it: the `Verifier`/`stage_verify` agent and prompt, the
+  `CitationVerdict`/`VerifyOutput` schemas, the `verdicts`/`verify_rounds` run-state fields,
+  the `verified`/`unsupported` counts, the `LITSYNTH_MAX_VERIFY_ROUNDS` config knob, the
+  `⚠UNVERIFIED` marking and the **A3** "no unverified claim shown as verified" invariant (now
+  moot — there is no separate verification step to disagree with grounding). The UI's
+  "citations verified" metric is replaced by a **notes-grounded** metric, and per-citation
+  verified/unverified badges are removed. Code-enforced invariants A1 (no non-kept source
+  cited) and A4 (cost cap is a hard stop) are unchanged.
 
 ---
 
