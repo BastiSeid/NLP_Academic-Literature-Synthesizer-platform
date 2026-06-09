@@ -39,6 +39,10 @@ class Config:
     # Data sources
     OPENALEX_EMAIL: str = os.getenv("LITSYNTH_OPENALEX_EMAIL", "").strip()
     SEMANTIC_SCHOLAR_API_KEY: str = os.getenv("SEMANTIC_SCHOLAR_API_KEY", "").strip()
+    # Web grey-literature author recovery: best-effort scrape of each result
+    # page's own bibliographic metadata (deterministic, read-only — no model).
+    WEB_ENRICH: bool = os.getenv("LITSYNTH_WEB_ENRICH", "1") not in ("0", "false", "False", "")
+    WEB_ENRICH_TIMEOUT: float = float(os.getenv("LITSYNTH_WEB_ENRICH_TIMEOUT", "6"))
 
     # Storage
     DB_PATH: str = _abspath(os.getenv("LITSYNTH_DB_PATH", "./litsynth.db"))

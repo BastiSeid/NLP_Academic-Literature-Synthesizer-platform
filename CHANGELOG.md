@@ -17,6 +17,19 @@ and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2
 ## [Unreleased]
 
 ### Added
+- **Web grey-literature author & year recovery** — web/grey-literature candidates are
+  no longer author-less and date-less. The web source now does a best-effort, read-only
+  scrape of each result page's own bibliographic metadata (Highwire `citation_*` tags,
+  JSON-LD, Dublin Core, generic `<meta name="author">`), recovering authors and the
+  publication year, so these entries get real authors and a year in the APA references,
+  `citations.bib`, and `citations.json` instead of falling back to title-first / `n.d.`. It is fully deterministic — no model infers names, so it adds no
+  hallucination surface (the note-grounding gate is unaffected) and needs no citation
+  verifier. Names in "Surname, Given" order are flipped to "Given Surname"; non-person
+  strings (publishers, URLs, "Editorial Staff", etc.) are rejected, and a title-match
+  guard skips pages that redirected somewhere unrelated. Pages without usable metadata
+  keep `authors=[]`. Tunable via `LITSYNTH_WEB_ENRICH` (default on) and
+  `LITSYNTH_WEB_ENRICH_TIMEOUT` (default 6s); fetches run in parallel and degrade
+  gracefully on any failure.
 - **APA 7 reference list** — the literature review now ends with an alphabetically
   sorted `## References` section rendered in APA 7th-edition style (journal-article,
   arXiv-preprint, and web variants; author initials, `& `/21+-author rules, `n.d.`
