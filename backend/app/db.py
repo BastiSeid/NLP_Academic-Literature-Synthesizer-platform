@@ -66,7 +66,7 @@ def list_runs(limit: int = 100) -> List[dict]:
 def mark_interrupted_runs() -> None:
     """On startup, any run left mid-flight is no longer being driven."""
     active = ("scoping", "awaiting_approval", "searching", "screening",
-              "extracting", "synthesizing", "verifying", "assembling")
+              "extracting", "synthesizing", "assembling")
     with _conn() as c:
         c.execute(
             f"UPDATE runs SET status='interrupted' WHERE status IN "

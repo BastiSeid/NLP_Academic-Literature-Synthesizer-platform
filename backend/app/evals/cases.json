@@ -1,12 +1,12 @@
 {
-  "description": "Eval set for the Academic Literature Synthesizer. Includes normal broad queries and deliberate failure cases (sparse literature, overstating-abstract traps, ambiguous scope). Citation verification gates EVERY run inline — there is no separate verification toggle.",
+  "description": "Eval set for the Academic Literature Synthesizer. Includes normal broad queries and deliberate failure cases (sparse literature, overstating-abstract traps, ambiguous scope). The note-grounding gate runs on EVERY run inline — each extracted note is checked against its own paper's text before it can be synthesized or cited.",
   "cases": [
     {
       "id": "llm-agents-survey",
       "category": "normal",
       "query": "What are the latest advancements in multi-agent LLM systems and orchestration?",
       "params": {"max_candidates": 40, "max_kept": 12, "source_set": ["arxiv", "semantic_scholar", "openalex"]},
-      "expect": "Rich literature; high kept count; most citations verifiable."
+      "expect": "Rich literature; high kept count; most notes grounded in source."
     },
     {
       "id": "rag-retrieval",
@@ -48,7 +48,7 @@
       "category": "failure-overstate",
       "query": "Do large language models truly reason, or pattern-match? Evidence for and against",
       "params": {"max_candidates": 40, "max_kept": 12},
-      "expect": "FAILURE TRAP: many abstracts overstate ('LLMs reason like humans'). Gatekeeper should flag OVERSTATED; Verifier must reject claims the notes don't support."
+      "expect": "FAILURE TRAP: many abstracts overstate ('LLMs reason like humans'). Gatekeeper should flag OVERSTATED; the note-grounding gate must drop extracted claims the paper text doesn't support."
     },
     {
       "id": "ambiguous-scope",

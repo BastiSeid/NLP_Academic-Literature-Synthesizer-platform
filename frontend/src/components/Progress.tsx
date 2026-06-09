@@ -7,13 +7,12 @@ const STAGE_LABELS: Record<string, string> = {
   screen: "3 · Screen & reject",
   extract: "4 · Deep read & extract",
   synthesize: "5 · Synthesize & draft",
-  verify: "6 · Verify citations",
 };
 
 // Which agent runs each stage — shown in the expanded summary header.
 const STAGE_AGENT: Record<string, string> = {
   scope: "Scout", search: "Scout", screen: "Gatekeeper",
-  extract: "Reader", synthesize: "Synthesizer", verify: "Verifier",
+  extract: "Reader", synthesize: "Synthesizer",
 };
 
 function tally(items: string[]): [string, number][] {
@@ -97,16 +96,6 @@ function StageSummary({ name, run }: { name: string; run: RunState }) {
       </>
     );
   }
-  if (name === "verify") {
-    if (run.verdicts.length === 0) return <p className="muted">Not run yet.</p>;
-    const ok = run.verdicts.filter((v) => v.supported).length;
-    return (
-      <p className="muted">
-        {ok}/{run.verdicts.length} citations supported · {run.verdicts.length - ok} unsupported
-        {run.verify_rounds > 0 ? ` · ${run.verify_rounds} re-read round(s)` : ""}.
-      </p>
-    );
-  }
   return <p className="muted">No summary available.</p>;
 }
 
@@ -116,7 +105,7 @@ export default function Progress({ run, onCancel, onResume }: { run: RunState; o
     setOpen((s) => { const x = new Set(s); x.has(n) ? x.delete(n) : x.add(n); return x; });
   const active = ACTIVE_STATUSES.has(run.status);
   const c = run.counts;
-  const total = run.stages.length || 6;
+  const total = run.stages.length || 5;
   const doneCount = run.stages.filter((s) => s.status === "done").length;
   const running = run.stages.find((s) => s.status === "running");
   const pct = run.status === "done"
@@ -143,7 +132,7 @@ export default function Progress({ run, onCancel, onResume }: { run: RunState; o
         <div className="metric"><div className="v">{c.candidates}</div><div className="l">candidates</div></div>
         <div className="metric"><div className="v" style={{ color: "var(--green)" }}>{c.kept}</div><div className="l">kept</div></div>
         <div className="metric"><div className="v" style={{ color: "var(--amber)" }}>{c.rejected}</div><div className="l">rejected</div></div>
-        <div className="metric"><div className="v">{c.verified}/{c.verified + c.unsupported}</div><div className="l">citations verified</div></div>
+        <div className="metric"><div className="v">{c.notes_grounded}/{c.notes_grounded + c.notes_dropped}</div><div className="l">notes grounded</div></div>
         <div className="metric"><div className="v">${run.cost_usd.toFixed(2)}</div><div className="l">cost</div></div>
         <div className="metric"><div className="v">{((run.tokens_in + run.tokens_out) / 1000).toFixed(0)}k</div><div className="l">tokens</div></div>
       </div>
@@ -171,11 +160,6 @@ export default function Progress({ run, onCancel, onResume }: { run: RunState; o
         })}
       </div>
 
-      {run.verify_rounds > 0 && (
-        <p className="muted" style={{ marginTop: 10 }}>
-          ↩ Verifier sent unsupported claims back to the Reader · round {run.verify_rounds}
-        </p>
-      )}
       {run.error && <div className="error" style={{ marginTop: 12 }}>⚠ {run.error}</div>}
 
       {active && (

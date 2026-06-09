@@ -40,18 +40,12 @@ export default function Results({ run }: { run: RunState }) {
 }
 
 function Review({ run }: { run: RunState }) {
-  const supportedByMarker = useMemo(() => {
-    const m: Record<string, boolean> = {};
-    run.verdicts.forEach((v) => { m[v.marker] = m[v.marker] || v.supported; });
-    return m;
-  }, [run]);
-
   const html = useMemo(() => {
     const raw = marked.parse(run.outputs.review_markdown || "_No review produced._", { async: false }) as string;
     let clean = DOMPurify.sanitize(raw);
     // turn [Sx] inline markers into working anchor links to the references list
-    clean = clean.replace(/\[([A-Za-z0-9_]+)(\s*⚠UNVERIFIED)?\]/g,
-      (_m, mk, warn) => `<a href="#cite-${mk}" class="cite">[${mk}${warn || ""}]</a>`);
+    clean = clean.replace(/\[([A-Za-z0-9_]+)\]/g,
+      (_m, mk) => `<a href="#cite-${mk}" class="cite">[${mk}]</a>`);
     return clean;
   }, [run]);
 
@@ -68,12 +62,10 @@ function Review({ run }: { run: RunState }) {
           <ul>
             {refs.map((r, i) => {
               const c = byId[r.source_id];
-              const ok = supportedByMarker[r.marker];
               return (
                 <li key={i} id={`cite-${r.marker}`}>
                   <strong>[{r.marker}]</strong> {c ? c.title : r.source_id}
                   {c?.year ? ` (${c.year})` : ""} {c?.url && <a href={c.url} target="_blank" rel="noreferrer">↗</a>}
-                  {" "}<span className="badge" style={{ color: ok ? "var(--green)" : "var(--red)" }}>{ok ? "verified" : "unverified"}</span>
                 </li>
               );
             })}

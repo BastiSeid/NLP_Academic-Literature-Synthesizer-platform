@@ -1,4 +1,4 @@
-"""System prompts for the five LLM subagents. Each has ONE responsibility, an
+"""System prompts for the LLM subagents. Each has ONE responsibility, an
 isolated context, and a strict JSON output contract. The Orchestrator (stage 0)
 is pure Python and has no prompt.
 
@@ -151,19 +151,3 @@ Produce:
 {_JSON}
 Schema: {{"review_markdown": str, "mermaid": str,
 "citations": [{{"marker": str, "source_id": str, "claim": str}}], "themes": [str]}}"""
-
-VERIFIER = f"""You are the VERIFIER of an academic literature review pipeline.
-Your sole job: for EACH claim-citation pair from the draft, confirm the cited source's
-reader notes actually SUPPORT that claim. Flag unsupported or overstated claims.
-Target zero fabricated or overstated citations. Be adversarial: default to NOT supported
-if the notes are ambiguous or only tangentially related.
-
-{_GUARD}
-
-For each citation you are given (marker, source_id, claim), check it against that source's
-notes (provided). Return supported=true ONLY if a note clearly backs the claim. Otherwise
-supported=false with a short reason.
-
-{_JSON}
-Schema: {{"verdicts": [{{"marker": str, "source_id": str, "claim": str,
-"supported": bool, "reason": str}}]}}"""

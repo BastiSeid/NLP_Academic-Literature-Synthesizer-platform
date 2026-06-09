@@ -1,6 +1,7 @@
 """Headless eval runner. Drives the pipeline directly (auto-approving the gate)
-and asserts the hard invariants on each case. Citation verification runs inline
-on every case — that's the gate, not an optional step.
+and asserts the hard invariants on each case. The note-grounding gate (Stage 4)
+runs inline on every case — every extracted note is checked against its own
+paper's text before it can be synthesized or cited.
 
 Usage (from backend/):
     python -m app.evals.run_evals            # run all cases
@@ -38,12 +39,6 @@ def _check_invariants(state) -> list[str]:
     cap = state.params.cost_cap_usd or 1e9
     if state.cost_usd > cap + 1e-6 and state.status == "done":
         failures.append(f"A4 violated: cost {state.cost_usd} > cap {cap} on a completed run")
-    # A3: unverified claims must be marked, not silently presented
-    unsupported = {v.marker for v in state.verdicts if not v.supported}
-    supported = {v.marker for v in state.verdicts if v.supported}
-    for m in unsupported - supported:
-        if state.outputs.review_markdown and f"[{m}]" in state.outputs.review_markdown:
-            failures.append(f"A3 violated: unverified marker {m} unmarked in review")
     return failures
 
 
@@ -64,8 +59,8 @@ def run_case(case: dict) -> dict:
         "candidates": state.counts.candidates,
         "kept": state.counts.kept,
         "rejected": state.counts.rejected,
-        "verified": state.counts.verified,
-        "unsupported": state.counts.unsupported,
+        "notes_grounded": state.counts.notes_grounded,
+        "notes_dropped": state.counts.notes_dropped,
         "cost_usd": round(state.cost_usd, 4),
         "error": state.error,
         "invariant_failures": invariant_failures,
@@ -95,7 +90,7 @@ def main():
         results.append(r)
         flag = "✅" if r["ok"] else "❌"
         print(f"  {flag} status={r['status']} kept={r['kept']} rejected={r['rejected']} "
-              f"verified={r['verified']}/{r['verified']+r['unsupported']} "
+              f"grounded={r['notes_grounded']}/{r['notes_grounded']+r['notes_dropped']} "
               f"cost=${r['cost_usd']} ({r['seconds']}s)")
         if r["invariant_failures"]:
             for f in r["invariant_failures"]:

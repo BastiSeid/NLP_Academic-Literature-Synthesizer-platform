@@ -1,4 +1,4 @@
-"""The six pipeline stages. Each operates on the RunContext, charges every agent
+"""The five pipeline stages. Each operates on the RunContext, charges every agent
 call against the cost cap, validates agent output against its schema, and persists
 a checkpoint via `save`. Retrieval is deterministic Python; agents reason only."""
 from __future__ import annotations
@@ -8,7 +8,7 @@ from typing import Callable, List
 
 from ..schemas import (
     ScopePlan, Candidate, ScreenResult, RejectionEntry, ReaderOutput,
-    ReaderNote, SynthOutput, VerifyOutput, ArbiterOutput, NoteVerifyOutput,
+    ReaderNote, SynthOutput, ArbiterOutput, NoteVerifyOutput,
 )
 from ..agents import prompts
 from ..agent_runner import run_structured
@@ -289,7 +289,7 @@ def stage_extract(ctx, save: Save, only_ids: List[str] | None = None) -> None:
 
 
 # ── Stage 5 — Synthesize & draft (Synthesizer) ───────────────────────────────
-def stage_synthesize(ctx, save: Save, feedback: str = "") -> None:
+def stage_synthesize(ctx, save: Save) -> None:
     st = ctx.state
     st.stage("synthesize").status = "running"
     save(ctx)
@@ -309,8 +309,6 @@ def stage_synthesize(ctx, save: Save, feedback: str = "") -> None:
         f"READER NOTES (the ONLY sources you may cite; use their source_id as [marker]):\n"
         f"{json.dumps(notes_payload, ensure_ascii=False)}"
     )
-    if feedback:
-        user += f"\n\nVERIFIER FEEDBACK — fix or remove these unsupported claims:\n{feedback}"
     synth: SynthOutput = _charged_structured(ctx, prompts.SYNTHESIZER, user, SynthOutput)
 
     # Invariant A1: never cite a non-kept source.
@@ -320,36 +318,3 @@ def stage_synthesize(ctx, save: Save, feedback: str = "") -> None:
     st.stage("synthesize").status = "done"
     st.stage("synthesize").detail = f"{len(synth.themes)} themes, {len(synth.citations)} citations"
     save(ctx)
-
-
-# ── Stage 6 — Verify citations (Verifier) ────────────────────────────────────
-def stage_verify(ctx, save: Save) -> VerifyOutput:
-    st = ctx.state
-    st.stage("verify").status = "running"
-    save(ctx)
-    citations = st.synth.citations if st.synth else []
-    by_id = {c.source_id: c for c in st.candidates}
-    payload = []
-    for cit in citations:
-        notes = st.notes.get(cit.source_id, [])
-        payload.append({
-            "marker": cit.marker,
-            "source_id": cit.source_id,
-            "claim": cit.claim,
-            "source_notes": [n.model_dump() for n in notes],
-        })
-    user = (
-        "Verify each claim-citation pair against that source's notes.\n\n"
-        f"PAIRS:\n{json.dumps(payload, ensure_ascii=False)}"
-    )
-    if not payload:
-        out = VerifyOutput(verdicts=[])
-    else:
-        out = _charged_structured(ctx, prompts.VERIFIER, user, VerifyOutput)
-    st.verdicts = out.verdicts
-    supported = sum(1 for v in out.verdicts if v.supported)
-    st.counts.verified = supported
-    st.counts.unsupported = len(out.verdicts) - supported
-    st.stage("verify").detail = f"{supported}/{len(out.verdicts)} citations verified"
-    save(ctx)
-    return out

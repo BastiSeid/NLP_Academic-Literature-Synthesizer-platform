@@ -14,7 +14,7 @@ export interface Health { ok: boolean; model: string; models: string[]; cost_cap
 export interface Stage { name: string; status: string; detail: string; }
 export interface Counts {
   candidates: number; kept: number; rejected: number;
-  verified: number; unsupported: number;
+  notes_grounded: number; notes_dropped: number;
 }
 export interface ScopePlan { sub_questions: string[]; search_terms: string[]; rationale: string; }
 export interface Candidate {
@@ -29,7 +29,6 @@ export interface ReaderNote {
   location: string; note_type: "claim" | "method" | "finding";
 }
 export interface CitationRef { marker: string; source_id: string; claim: string; }
-export interface CitationVerdict { marker: string; source_id: string; claim: string; supported: boolean; reason: string; }
 export interface SynthOutput {
   review_markdown: string; mermaid: string; citations: CitationRef[]; themes: string[];
 }
@@ -45,10 +44,8 @@ export interface RunState {
   candidates: Candidate[]; kept_ids: string[]; rejections: RejectionEntry[];
   notes: Record<string, ReaderNote[]>;
   synth: SynthOutput | null;
-  verdicts: CitationVerdict[];
   outputs: Outputs;
   cost_usd: number; tokens_in: number; tokens_out: number; steps: number; error: string;
-  verify_rounds: number;
 }
 export interface RunSummary {
   id: string; query: string; status: string; phase: string;
@@ -84,6 +81,6 @@ export const api = {
 
 export const ACTIVE_STATUSES = new Set([
   "created", "scoping", "searching", "screening",
-  "extracting", "synthesizing", "verifying", "assembling",
+  "extracting", "synthesizing", "assembling",
 ]);
 export const SOURCES = ["arxiv", "semantic_scholar", "openalex", "web"];

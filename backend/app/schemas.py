@@ -109,16 +109,3 @@ class SynthOutput(BaseModel):
     mermaid: str
     citations: List[CitationRef]
     themes: List[str] = Field(default_factory=list)
-
-
-# ── Stage 6: Verifier output ─────────────────────────────────────────────────
-class CitationVerdict(BaseModel):
-    marker: str
-    source_id: str
-    claim: str
-    supported: bool
-    reason: str = ""
-
-
-class VerifyOutput(BaseModel):
-    verdicts: List[CitationVerdict]

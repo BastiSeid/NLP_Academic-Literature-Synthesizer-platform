@@ -1,31 +1,32 @@
 # 📚 Academic Literature Synthesizer
 
-A runnable **multi-agent web platform**. Enter a broad research question; a six-stage
+A runnable **multi-agent web platform**. Enter a broad research question; a five-stage
 pipeline of specialized agents scopes it, searches the scholarly web, **double-screens**
 out the weak work (two adversarial screeners + an arbiter), deep-reads what survives and
-**fact-checks every extracted note against its own paper**, synthesizes a themed review,
-and **verifies every citation against its source** before assembly. You get four deliverables — a
-citation-verified literature review, a rejection log, a machine-readable citations
-export, and a visual synthesis diagram — all rendered in the UI and exportable.
+**fact-checks every extracted note against its own paper**, then synthesizes a themed
+review. You get four deliverables — a grounded literature review, a rejection log, a
+machine-readable citations export, and a visual synthesis diagram — all rendered in the
+UI and exportable.
 
 The platform is **read-only over every external source**. It writes only to its own
 SQLite datastore and to your export folder.
 
 > **Who it's for:** researchers, grad students, and analysts who want a defensible
-> first-pass literature review where the *screening* and *citation integrity* are first-class,
+> first-pass literature review where the *screening* and *source grounding* are first-class,
 > not afterthoughts.
 
 ---
 
-## Architecture — the six-stage pipeline
+## Architecture — the five-stage pipeline
 
-The **Orchestrator** delegates through six stages. An **approval gate** fires after
+The **Orchestrator** delegates through five stages. An **approval gate** fires after
 scoping (a UI step). Screening is **doubly judged** — a strict and a lenient screener
 decide independently and an **Arbiter** reconciles their disagreements — and every
 exclusion is written to a rejection log. The **Reader's** notes pass a **grounding gate**
-(each note must trace back to its own paper) before synthesis, and the Stage-6 **Verifier**
-loops unsupported claims back before assembly. Two verification layers at the two
-highest-impact points (screening, extraction), plus the final citation check.
+(each note must trace back to its own paper) before synthesis — this is the hallucination
+defense: notes are checked against their source at extraction, so only grounded claims
+ever reach the Synthesizer or a citation. Two verification layers sit at the two
+highest-impact points: screening (relevance/quality) and extraction (source grounding).
 
 ```mermaid
 flowchart TD
@@ -43,9 +44,7 @@ flowchart TD
     EXTRACT --> NGATE{"4 - Note-grounding gate: is each note traceable to its own paper's text?"}
     NGATE -- "ungrounded: drop note" --> DROP[("Dropped notes (audited)")]
     NGATE -- "grounded notes" --> SYNTH["5 - Synthesize (Synthesizer): themes, consensus vs dispute, open gaps"]
-    SYNTH --> VERIFY{"6 - Verify citations (Verifier): does each source actually back its claim?"}
-    VERIFY -- "unsupported: send back" --> EXTRACT
-    VERIFY -- "all check out" --> OUT["Assemble outputs"]
+    SYNTH --> OUT["Assemble outputs"]
     OUT --> O1["Literature review (.md)"]
     OUT --> O2["Rejection log"]
     OUT --> O3["Citations export (BibTeX / JSON)"]
@@ -62,7 +61,7 @@ a single responsibility, and a narrow tool scope. Each agent's output is **schem
 
 | # | Agent | Responsibility | Tool scope | Output (schema-validated) |
 |---|-------|----------------|-----------|----------------------------|
-| 0 | **Orchestrator** | Owns the run end-to-end; routes the six stages; enforces stop conditions, cost cap, and invariants; pauses at the gate; assembles + validates the four deliverables. | None external — pure delegation + assembly (Python). | The four deliverables. |
+| 0 | **Orchestrator** | Owns the run end-to-end; routes the five stages; enforces stop conditions, cost cap, and invariants; pauses at the gate; assembles + validates the four deliverables. | None external — pure delegation + assembly (Python). | The four deliverables. |
 | 1 | **Scout (scope)** | Expand the broad query into sub-questions and search terms. | None (reasoning). | `ScopePlan` — sub-questions, terms. |
 | 2 | **Scout (retrieve)** | Maximize recall of relevant/seminal/newest work. | arXiv, Semantic Scholar, OpenAlex, web — **HTTP GET only**. Deterministic Python clients. | `Candidate[]` with full metadata. |
 | 3a | **Gatekeeper · strict** (precision) | Judge every candidate on relevance + quality, rejecting when in doubt. | None (judgment over metadata/abstracts). | `ScreenResult` (per-candidate keep/reject + reason). |
@@ -71,7 +70,6 @@ a single responsibility, and a narrow tool scope. Each agent's output is **schem
 | 4 | **Reader** | Deep-read each kept paper; extract faithful claims/methods/findings with exact locations **and a verbatim quote**. No invention. | PDF/HTML fetch (read-only) → text handed to a reasoning agent. | `ReaderNote[]` (claim, evidence, location, quote, source_id). |
 | 4b | **Note Verifier** (grounding gate) | Check each note against its **own paper's full text** (reused in-memory, no re-fetch); drop notes not traceable to the source before synthesis. | Read access to the paper text already fetched in Stage 4. | `NoteVerifyOutput` (binary grounded per note); `dropped_notes`. |
 | 5 | **Synthesizer** | Cluster notes into themes; consensus vs dispute; gaps; draft the review with inline citations; emit the Mermaid landscape. | None (reasoning). | `SynthOutput` — review markdown, mermaid, citations. |
-| 6 | **Verifier** | For each claim-citation pair, confirm the cited source's notes actually support the claim. Route failures back. | Read access to reader notes (passed in context). | `CitationVerdict[]` — pass/fail + reason. |
 
 **Tool scope is enforced deterministically:** the LLM agents run with in-CLI tools
 disabled (`--allowedTools ""`), so they reason only over the context we hand them. All
@@ -97,25 +95,25 @@ never reach out, write, or exceed its lane.
   is applied only *after* reconciliation, so the agreement signal is meaningful rather than a
   budget artifact. The fast path skips the arbiter entirely when the screeners agree, and the
   inter-screener `screen_agreement` is recorded for evaluation.
-- **Note-grounding gate — fact-check extraction before it can propagate.** A hallucinated or
-  embellished Reader note becomes a "fact" the Synthesizer cites, so garbage at Stage 4 spreads
-  everywhere. Each note now carries a **verbatim quote** and is checked against its **own paper's
-  full text** (reused in-memory from the read — no re-fetch) by a Note Verifier; only notes
-  **traceable to the source** survive, and dropped notes are audited in `dropped_notes`. This is
-  defense in depth with the Stage-6 Verifier: notes are grounded at extraction, final claims are
-  verified at synthesis.
+- **Note-grounding gate — the hallucination defense, applied where it's cheapest to catch.** A
+  hallucinated or embellished Reader note becomes a "fact" the Synthesizer cites, so garbage at
+  Stage 4 spreads everywhere. Each note carries a **verbatim quote** and is checked against its
+  **own paper's full text** (reused in-memory from the read — no re-fetch) by a Note Verifier;
+  only notes **traceable to the source** survive, and dropped notes are audited in `dropped_notes`.
+  Grounding at extraction — before a claim can ever propagate — is strictly stronger than checking
+  citations after the fact: a claim that can't be traced to its paper never enters the synthesis in
+  the first place, so the Synthesizer only ever cites grounded notes.
 - **The rejection log — "the moat is what's rejected."** A review is only as trustworthy as
   what it *excluded*. Every excluded candidate is recorded with a `reason_code` and a one-line
   justification, surfaced as a sortable table and exported. Nothing is silently dropped: a
   code-level invariant forces every candidate into either *kept* or *rejected*.
-- **The Verifier loop + citation-integrity invariants.** Models confabulate citations. The
-  Verifier checks each claim-citation pair against the Reader's notes; unsupported claims are
-  routed **back to the Reader/Synthesizer** (bounded to 2 rounds). After the cap, remaining
-  unsupported claims are **explicitly marked `⚠UNVERIFIED`**, never silently presented as
-  verified. Code-level invariants are enforced regardless of model output and asserted on every
-  run: (A1) a rejected (or non-kept) source never appears in the review's citations; (A3) an
-  unverified claim is never silently presented as verified — it must carry the `⚠UNVERIFIED`
-  mark; and (A4) the per-run cost cap is a hard stop. This is the gate on every run.
+- **Citation-integrity invariants.** Models confabulate citations, so source integrity is
+  enforced in code, regardless of model output, and asserted on every run: (A1) a rejected (or
+  non-kept) source never appears in the review's citations — the Synthesizer's citation list is
+  filtered against the kept set, and it may only cite from the grounded notes it was handed; and
+  (A4) the per-run cost cap is a hard stop. Combined with the note-grounding gate upstream — which
+  drops any claim not traceable to its own paper before synthesis — every citation in the final
+  review points at a kept source backed by a grounded note.
 - **Subagents with isolated context.** One monolithic prompt would let early raw PDF dumps rot
   the context and blur responsibilities. Instead each stage is a fresh `claude` process with
   exactly the context it needs; finished stages are summarized to the datastore; the
@@ -125,9 +123,8 @@ never reach out, write, or exceed its lane.
   framed as **untrusted DATA, never instructions** — every agent prompt carries this rule and
   fenced delimiters, so an "ignore previous instructions" buried in a PDF is treated as content
   to analyze, not a command.
-- **Guardrails as hard stops.** Cost cap, wall-clock timeout, max-steps, capped re-search /
-  verifier rounds, and a kill switch are enforced in `guards.py` and checked before every agent
-  call and between stages — the cost cap is a hard ceiling, not advisory. Because run state is
+- **Guardrails as hard stops.** Cost cap, wall-clock timeout, max-steps, and a kill switch are
+  enforced in `guards.py` and checked before every agent call and between stages — the cost cap is a hard ceiling, not advisory. Because run state is
   checkpointed after every stage, a stopped run (failure, interrupt, or cap) can be **resumed**
   from its first not-done stage rather than restarting — completed stages and accrued cost are kept.
 - **Trade-offs.** (1) Each `claude` CLI call carries ~$0.5 / ~12s system overhead, so we
@@ -153,7 +150,7 @@ never reach out, write, or exceed its lane.
 | Persistence | **SQLite (stdlib)** | Zero-config, user-controlled; full run state checkpointed as JSON after every stage → survives restart / page reload. |
 | Frontend | **React + TypeScript + Vite** | Fast SPA; polls run state; tabbed results. |
 | Rendering | **marked + DOMPurify + Mermaid.js** | Sanitized markdown; client-side Mermaid with pan/zoom + fullscreen and SVG/PNG/.mmd export. |
-| Model | **Opus 4.8** (`LITSYNTH_MODEL`, default `claude-opus-4-8`) | Strongest reasoning for screening/synthesis/verification; set the server default via env, or pick per run from a UI dropdown (Opus 4.8 / Sonnet 4.6 / Haiku 4.5). |
+| Model | **Opus 4.8** (`LITSYNTH_MODEL`, default `claude-opus-4-8`) | Strongest reasoning for screening, deep reading, and synthesis; set the server default via env, or pick per run from a UI dropdown (Opus 4.8 / Sonnet 4.6 / Haiku 4.5). |
 
 ---
 
@@ -193,15 +190,16 @@ cd litsynth/frontend && npm install && npm run dev
 1. **New Run** → type a broad question → choose a **model** for the run (dropdown; blank = server
    default) → (optional) open **Advanced parameters**
    (`date_range`, `max_candidates`, `max_kept`, source toggles, `export_dir`, cost cap) → **Start**.
-2. **Pipeline progress** shows the six stages live behind a determinate **progress bar** (percentage
-   + current-stage caption), with candidate/kept/rejected counts, per-run cost + token usage, and a
-   **Cancel** button (the kill switch). Each stage row **expands** to a per-agent summary of what it
-   produced — sub-questions + search terms, per-source candidate counts, rejection-reason tallies,
-   reader-note counts, themes, and citation verdicts. A failed/interrupted run shows a **Resume** button.
+2. **Pipeline progress** shows the five stages live behind a determinate **progress bar** (percentage
+   + current-stage caption), with candidate/kept/rejected and notes-grounded counts, per-run cost +
+   token usage, and a **Cancel** button (the kill switch). Each stage row **expands** to a per-agent
+   summary of what it produced — sub-questions + search terms, per-source candidate counts,
+   rejection-reason tallies, reader-note counts (grounded vs dropped), and themes. A
+   failed/interrupted run shows a **Resume** button.
 3. At the **approval gate**, review the sub-questions, search terms, and source list →
    **Approve** or **Revise** (edit, then resubmit). Nothing is searched until you act.
 4. **Results** tabs: **Literature Review** (sanitized markdown with working inline citation
-   links + verified/unverified badges), **Rejection Log** (sortable table), **Citations**
+   links to the reference list), **Rejection Log** (sortable table), **Citations**
    (BibTeX + JSON, copy/download), **Visual Synthesis** (Mermaid with pan/zoom + fullscreen,
    export SVG/PNG/.mmd). Deliverables are also written to `export_dir/<run_id>/`.
 
@@ -223,7 +221,6 @@ See [`backend/.env.example`](backend/.env.example). Key knobs:
 | `LITSYNTH_COST_CAP_USD` | `40` | Hard per-run cost ceiling (kill switch). Overridable per run in the UI. |
 | `LITSYNTH_RUN_TIMEOUT` | `3600` | Wall-clock stop condition (s). |
 | `LITSYNTH_MAX_STEPS` | `200` | Max agent calls before forced stop. |
-| `LITSYNTH_MAX_VERIFY_ROUNDS` | `2` | Verifier→Reader rework rounds before marking remaining claims unverified. |
 | `LITSYNTH_DB_PATH` / `LITSYNTH_EXPORT_DIR` | `./litsynth.db` / `./exports` | Datastore + default export folder (the only places the platform writes). |
 
 ---
@@ -236,7 +233,8 @@ The eval set lives in [`backend/app/evals/cases.json`](backend/app/evals/cases.j
 - `sparse-niche` / `recent-only-empty` — near-empty literature → must degrade and **not
   fabricate** citations.
 - `overstated-abstract` — abstracts that oversell ("LLMs reason like humans") → the
-  Gatekeeper should flag `OVERSTATED` and the Verifier must reject claims the notes don't support.
+  Gatekeeper should flag `OVERSTATED` and the note-grounding gate must drop extracted claims the
+  paper text doesn't support.
 - `ambiguous-scope` ("transformers") — ML vs electrical → exactly what the **approval gate** exists for.
 - `tiny-budget` — a $3 cost cap → the run must **hit the cap and halt cleanly** (proving the hard stop).
 
@@ -244,11 +242,10 @@ The eval set lives in [`backend/app/evals/cases.json`](backend/app/evals/cases.j
 signal per run: the **inter-screener agreement** (`screen_agreement` — how often the strict and
 lenient screeners agreed, and how the arbiter resolved the rest) and the **note-grounding drop
 rate** (`notes_grounded` / `notes_dropped` — how many extracted notes failed the Stage-4 source
-check). Together with the Stage-6 citation verdicts, these are the basis for discussing result
-quality.
+check). These are the basis for discussing result quality.
 
-**Citation verification gates every run inline** — there is no separate verification toggle.
-Run the headless harness (it auto-approves the gate and asserts the hard invariants A1/A3/A4):
+**The note-grounding gate runs on every run inline** — there is no separate verification toggle.
+Run the headless harness (it auto-approves the gate and asserts the hard invariants A1/A4):
 
 ```bash
 cd litsynth/backend
@@ -256,7 +253,7 @@ cd litsynth/backend
 ./.venv/bin/python -m app.evals.run_evals --case overstated-abstract   # one case (spends real tokens)
 ```
 
-Each case reports status, kept/rejected/verified counts, cost, and any invariant violations.
+Each case reports status, kept/rejected counts, the note-grounding ratio, cost, and any invariant violations.
 
 ---
 
@@ -269,7 +266,7 @@ litsynth/
 │  │  ├─ main.py                # FastAPI routes
 │  │  ├─ agent_runner.py        # headless `claude` CLI wrapper (usage + cost)
 │  │  ├─ config.py  schemas.py  db.py  exporters.py
-│  │  ├─ agents/prompts.py      # the five subagent system prompts
+│  │  ├─ agents/prompts.py      # the subagent system prompts
 │  │  ├─ sources/               # read-only arXiv / S2 / OpenAlex / web / fetch / dedupe
 │  │  ├─ pipeline/              # orchestrator · stages · guards · state
 │  │  └─ evals/                 # cases.json + run_evals.py

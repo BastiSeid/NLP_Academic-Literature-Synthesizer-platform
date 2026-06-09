@@ -1,4 +1,4 @@
-"""Orchestrator: owns a run end-to-end, routes work through the six stages,
+"""Orchestrator: owns a run end-to-end, routes work through the five stages,
 enforces stop conditions and invariants, pauses at the approval gate, and
 assembles + validates the four deliverables. Pure delegation + assembly — it
 makes no external calls itself."""
@@ -93,8 +93,7 @@ class RunManager:
         elif st.approved:
             # approved → resume heavy phases; _run_after_gate skips done stages
             order = [("search", "searching"), ("screen", "screening"),
-                     ("extract", "extracting"), ("synthesize", "synthesizing"),
-                     ("verify", "verifying")]
+                     ("extract", "extracting"), ("synthesize", "synthesizing")]
             st.status = next((s for n, s in order if not _stage_done(st, n)), "assembling")
             self._save(ctx)
             asyncio.create_task(asyncio.to_thread(self._run_after_gate, ctx))
@@ -182,10 +181,6 @@ class RunManager:
                 st.status = "synthesizing"; self._save(ctx)
                 stages.stage_synthesize(ctx, self._save)
 
-            if not _stage_done(st, "verify"):
-                st.status = "verifying"; self._save(ctx)
-                self._verify_loop(ctx)
-
             st.status = "assembling"; self._save(ctx)
             self._finalize(ctx)
 
@@ -197,31 +192,12 @@ class RunManager:
         except Exception as e:  # noqa: BLE001
             self._fail(ctx, e, st.status)
 
-    def _verify_loop(self, ctx: RunContext) -> None:
-        """Verifier → unsupported claims routed back to Reader/Synth, bounded."""
-        st = ctx.state
-        for rnd in range(config.MAX_VERIFY_ROUNDS + 1):
-            out = stages.stage_verify(ctx, self._save)
-            unsupported = [v for v in out.verdicts if not v.supported]
-            if not unsupported or rnd >= config.MAX_VERIFY_ROUNDS:
-                break
-            st.verify_rounds = rnd + 1
-            involved = sorted({v.source_id for v in unsupported})
-            stages.stage_extract(ctx, self._save, only_ids=involved)  # ← back to EXTRACT
-            feedback = "\n".join(
-                f"- [{v.marker}] claim '{v.claim}' (source {v.source_id}) "
-                f"unsupported: {v.reason}" for v in unsupported
-            )
-            stages.stage_synthesize(ctx, self._save, feedback=feedback)
-        st.stage("verify").status = "done"
-        self._save(ctx)
-
     def _finalize_no_sources(self, ctx: RunContext, reason: str) -> None:
         """Terminal path when there is nothing to synthesize. Emits a short plain
         message instead of a fabricated review, and skips the unrun stages. Leaves
-        st.synth as None so the citation invariants (A1/A3) have nothing to trip on."""
+        st.synth as None so the citation invariant (A1) has nothing to trip on."""
         st = ctx.state
-        for name in ("screen", "extract", "synthesize", "verify"):
+        for name in ("screen", "extract", "synthesize"):
             if st.stage(name).status != "done":
                 st.stage(name).status = "skipped"
 
@@ -258,29 +234,17 @@ class RunManager:
         review = st.synth.review_markdown if st.synth else "# Literature Review\n\n(empty)"
         mermaid = st.synth.mermaid if st.synth else "graph TD\n  A[No synthesis produced]"
 
-        # Invariant A3: never present an unverified claim as verified — mark them.
-        supported = {v.marker for v in st.verdicts if v.supported}
-        unsupported = {v.marker for v in st.verdicts if not v.supported} - supported
-        for m in sorted(unsupported):
-            review = review.replace(f"[{m}]", f"[{m} ⚠UNVERIFIED]")
-        if unsupported:
-            review += (
-                "\n\n---\n\n> **⚠ Unverified claims:** the citation markers above tagged "
-                "`⚠UNVERIFIED` could not be confirmed against their cited source after "
-                f"{config.MAX_VERIFY_ROUNDS} verification rounds and should be read with caution.\n"
-            )
-
-        # Invariant A1: rejected sources never appear → cite only kept + verified-or-marked.
+        # Invariant A1: rejected sources never appear → cite only kept sources.
         kept_candidates = [by_id[sid] for sid in st.kept_ids if sid in by_id]
 
-        # APA 7 reference list, appended AFTER marker-based verification tagging so the
-        # inline [source_id] markers (which the verifier keys on) stay intact upstream.
+        # APA 7 reference list appended at assembly. The inline [source_id] markers
+        # the Synthesizer emits are left intact.
         refs = exporters.apa_references_section(kept_candidates)
         if refs:
             review = review.rstrip() + "\n\n" + refs
 
         bibtex = exporters.to_bibtex(kept_candidates)
-        citations_json = exporters.to_citations_json(kept_candidates, st.verdicts)
+        citations_json = exporters.to_citations_json(kept_candidates)
         rejection_md = exporters.rejection_log_markdown(st.rejections)
 
         st.outputs.review_markdown = review

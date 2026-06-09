@@ -47,7 +47,7 @@ export default function App() {
     <div className="app">
       <div className="topbar">
         <h1>📚 Academic Literature Synthesizer</h1>
-        <span className="tag">six-stage multi-agent pipeline {model && `· ${model}`}</span>
+        <span className="tag">five-stage multi-agent pipeline {model && `· ${model}`}</span>
       </div>
       <div className="nav">
         <button className={view === "new" ? "active" : ""} onClick={() => setView("new")}>＋ New Run</button>

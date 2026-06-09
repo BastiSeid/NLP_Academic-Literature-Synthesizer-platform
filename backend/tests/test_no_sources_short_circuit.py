@@ -54,10 +54,10 @@ def _stubbed_pipeline(search_fx=None, screen_fx=None, extract_fx=None):
     tempdir, then run ``_run_after_gate`` against the given side-effect callables.
 
     ``search_fx``/``screen_fx``/``extract_fx`` receive the live ``state`` and mutate it
-    to set up the scenario (e.g. add candidates, keep ids). Synthesize/verify are stubbed
+    to set up the scenario (e.g. add candidates, keep ids). Synthesize is stubbed
     to count calls and return harmlessly — the whole point is to prove synthesize never
     runs on a no-sources path. Yields ``(state, calls)``."""
-    calls = {k: 0 for k in ("search", "screen", "extract", "synthesize", "verify")}
+    calls = {k: 0 for k in ("search", "screen", "extract", "synthesize")}
 
     def _stage(name, fx):
         def stub(ctx, save, *args, **kwargs):
@@ -76,7 +76,6 @@ def _stubbed_pipeline(search_fx=None, screen_fx=None, extract_fx=None):
         stages.stage_screen = _stage("screen", screen_fx)
         stages.stage_extract = _stage("extract", extract_fx)
         stages.stage_synthesize = _stage("synthesize", None)
-        stages.stage_verify = _stage("verify", None)
         db_mod.save_run = lambda *a, **k: None          # no SQLite writes
         config_mod.config.EXPORT_DIR = tmp              # exports land in the tempdir
 
@@ -102,7 +101,7 @@ def _assert_no_fabricated_review(state, calls):
     assert calls["synthesize"] == 0, "Synthesizer was invoked on a no-sources run"
     # The run still finishes cleanly.
     assert state.status == "done", f"expected status 'done', got {state.status!r}"
-    # No synthesis object → citation invariants (A1/A3) have nothing to trip on.
+    # No synthesis object → the citation invariant (A1) has nothing to trip on.
     assert state.synth is None, "st.synth should stay None when there are no sources"
     # The plain "not generated" message, not a paper.
     review = state.outputs.review_markdown
@@ -110,7 +109,6 @@ def _assert_no_fabricated_review(state, calls):
     assert "##" not in review, "review must not contain paper-section (##) headers"
     # Downstream stages that never ran are marked skipped (not left pending/running).
     assert state.stage("synthesize").status == "skipped"
-    assert state.stage("verify").status == "skipped"
 
 
 # ── scenarios: one per guard ─────────────────────────────────────────────────

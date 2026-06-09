@@ -6,7 +6,7 @@ import json
 import re
 from pathlib import Path
 from typing import List
-from .schemas import Candidate, CitationVerdict
+from .schemas import Candidate
 
 
 def _cite_key(c: Candidate) -> str:
@@ -183,11 +183,7 @@ def to_bibtex(kept: List[Candidate]) -> str:
     return "\n\n".join(entries) + ("\n" if entries else "")
 
 
-def to_citations_json(kept: List[Candidate], verdicts: List[CitationVerdict]) -> str:
-    backed: dict[str, list] = {}
-    for v in verdicts:
-        if v.supported:
-            backed.setdefault(v.source_id, []).append(v.claim)
+def to_citations_json(kept: List[Candidate]) -> str:
     payload = []
     for c in kept:
         payload.append({
@@ -201,7 +197,6 @@ def to_citations_json(kept: List[Candidate], verdicts: List[CitationVerdict]) ->
             "source": c.source,
             "bibtex_key": _cite_key(c),
             "apa": apa_reference(c),
-            "verified_claims": backed.get(c.source_id, []),
         })
     return json.dumps(payload, indent=2, ensure_ascii=False)
 
