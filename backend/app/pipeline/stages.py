@@ -255,9 +255,18 @@ def _verify_notes(ctx, c: Candidate, notes: List[ReaderNote], text: str):
         for n, v in zip(notes, out.verdicts):           # reliable: one verdict per note, in order
             (grounded if v.grounded else dropped).append(n)
     else:                                                # fallback: match by claim text
+        # Fail closed: this gate is the only anti-hallucination layer, so a note whose
+        # verdict is missing (empty/partial verifier output) is dropped, never kept.
         gmap = {v.claim.strip(): v.grounded for v in out.verdicts}
+        unmatched = sum(1 for n in notes if n.claim.strip() not in gmap)
+        if unmatched:
+            log.warning(
+                "note verifier returned %d verdicts for %d notes on %s — "
+                "dropping %d unmatched note(s) (verifier_verdict_missing)",
+                len(out.verdicts), len(notes), c.source_id, unmatched,
+            )
         for n in notes:
-            (grounded if gmap.get(n.claim.strip(), True) else dropped).append(n)
+            (grounded if gmap.get(n.claim.strip(), False) else dropped).append(n)
     return grounded, dropped
 
 
