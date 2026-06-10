@@ -236,6 +236,8 @@ See [`backend/.env.example`](backend/.env.example). Key knobs:
 | Var | Default | Meaning |
 |-----|---------|---------|
 | `LITSYNTH_MODEL` | `claude-opus-4-8` | Default model for all agents (the server default). |
+| `LITSYNTH_CLAUDE_BIN` | `claude` | Path to the `claude` CLI binary if not on PATH. |
+| `LITSYNTH_AGENT_TIMEOUT` | `300` | Per-agent-call wall-clock timeout (s). |
 | `LITSYNTH_AVAILABLE_MODELS` | Opus 4.8 / Sonnet 4.6 / Haiku 4.5 | Comma-separated models offered in the New Run dropdown; exposed via `/health`. |
 | `LITSYNTH_COST_CAP_USD` | `40` | Hard per-run cost ceiling (kill switch). Overridable per run in the UI. |
 | `LITSYNTH_RUN_TIMEOUT` | `3600` | Wall-clock stop condition (s). |
@@ -249,7 +251,7 @@ See [`backend/.env.example`](backend/.env.example). Key knobs:
 ## Evaluation
 
 The eval set lives in [`backend/app/evals/cases.json`](backend/app/evals/cases.json) —
-13 saved cases including deliberate **failure cases**:
+14 saved cases including deliberate **failure cases**:
 
 - `sparse-niche` / `recent-only-empty` — near-empty literature → must degrade and **not
   fabricate** citations.
@@ -293,5 +295,7 @@ litsynth/
 │  │  └─ evals/                 # cases.json + run_evals.py
 │  └─ requirements.txt  .env.example
 ├─ frontend/                    # React + Vite + TS (New Run, Progress, Gate, Results, History)
-└─ run.sh
+├─ run.sh                       # one-command start (backend :8000 + frontend :5173)
+├─ CHANGELOG.md                 # release history
+└─ BACKLOG.md                   # deferred future features
 ```
