@@ -14,7 +14,6 @@ from ..schemas import (
 from ..agents import prompts
 from ..agent_runner import run_structured
 from ..sources import arxiv, semantic_scholar, openalex, crossref, web, fetch, dedupe
-from ..config import config
 
 log = logging.getLogger(__name__)
 

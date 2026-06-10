@@ -11,7 +11,7 @@ from typing import Dict, Optional
 
 from ..config import config
 from .. import db
-from ..schemas import RunParams, ScopePlan, Candidate
+from ..schemas import RunParams, ScopePlan
 from .. import exporters
 from .state import RunState
 from .guards import (

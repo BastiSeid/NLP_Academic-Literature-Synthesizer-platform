@@ -24,5 +24,8 @@ frontend/dist/
 dist/
 *.tsbuildinfo
 
+# ─── Local AI-assistant work artifacts (never part of the app) ───
+MEMORY/
+
 # ─── OS ───
 .DS_Store

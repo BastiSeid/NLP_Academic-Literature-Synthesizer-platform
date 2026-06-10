@@ -122,11 +122,9 @@ textarea { resize: vertical; min-height: 70px; }
 .field { margin-bottom: var(--sp-4); }
 .field label { display: block; color: var(--muted); font-size: var(--fs-xs); margin-bottom: var(--sp-1); font-weight: 500; }
 .muted { color: var(--muted); }
-.grow { flex: 1; min-width: 160px; }
 
 /* width utilities */
 .measure { max-width: var(--measure); }
-.bleed { width: 100%; }
 .table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
 .form-narrow { max-width: 720px; margin-inline: auto; }
 .param-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: var(--sp-3); }
