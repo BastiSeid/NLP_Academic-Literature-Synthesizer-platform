@@ -106,6 +106,15 @@ and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2
 - **Run view shows the full research question** instead of truncating it to 70 characters.
 
 ### Fixed
+- **Note-grounding gate now fails closed on missing verifier verdicts** — when the
+  Stage-4 NOTE_VERIFIER returns fewer (or zero) verdicts than notes, unmatched notes
+  were previously defaulted to *grounded* and kept, silently bypassing the platform's
+  only anti-hallucination layer. They are now dropped (recorded in `dropped_notes`,
+  with a `verifier_verdict_missing` warning in the backend log), and the verifier
+  prompt now explains the `[FULL TEXT UNAVAILABLE — ABSTRACT ONLY]` marker so
+  abstract-only papers are judged against the abstract instead of penalized. A
+  zero-cost regression test (`backend/tests/test_note_verify_fail_closed.py`) guards
+  the empty-, partial-, and matching-verdict paths.
 - **No fabricated review when there are no sources** — if a run finds no candidates
   (or none survive screening, or no verifiable content can be extracted), the pipeline
   now stops before the Synthesizer and emits a short "Literature review not generated"

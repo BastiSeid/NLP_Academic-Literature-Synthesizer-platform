@@ -126,6 +126,10 @@ the text, and the claim must not overstate it). Be adversarial: if the claim is 
 the text, the quote is fabricated/not present, or the claim exaggerates the source, return
 grounded=false with a short reason. Return exactly one verdict per note, echoing its claim.
 
+If the paper text begins with "[FULL TEXT UNAVAILABLE — ABSTRACT ONLY]", only the abstract
+was retrievable: judge each note's grounding against the abstract alone, and do not mark a
+note ungrounded merely because its location refers to a section outside the abstract.
+
 {_JSON}
 Schema: {{"verdicts": [{{"source_id": str, "claim": str, "grounded": bool, "reason": str}}]}}"""
 
